@@ -1,31 +1,77 @@
-*Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache*
+# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v3.1)
 
-Version: 3.1
+**Autor:** Hudnur111 · IBoy · Coding Crew Tag 1  
+**Status:** In Entwicklung  
+**Website:** [Leitstellenspiel](https://www.leitstellenspiel.de)
 
-Autor: Hudnur111 - IBoy - Coding Crew Tag 1
+---
 
-Website: Leitstellenspiel
+## 📌 Beschreibung
 
----------------------------
+Dieses **Benutzerskript** für das Spiel **Leitstellenspiel** bietet eine erweiterte Möglichkeit zur **individuellen Konfiguration von Ausrückverzögerungen** für Fahrzeuge **einer einzelnen Wache**.  
+Es ergänzt die Spieloberfläche um eine moderne, benutzerfreundliche **Sidebar**, mit der alle Verzögerungen übersichtlich und intuitiv angepasst werden können.
 
-*Beschreibung:*
-Dieses Benutzer-Skript für das Spiel „Leitstellenspiel“ bietet eine erweiterte Möglichkeit zur Konfiguration von Ausrückverzögerungen für Fahrzeuge einer einzelnen Wache. Die Anwendung fügt eine benutzerfreundliche Sidebar am rechten Rand der Seite hinzu, die es ermöglicht, Verzögerungen für jedes Fahrzeug der aktuell angezeigten Wache anzupassen. Die Sidebar bietet eine Scrollfunktion für lange Listen und ein professionell gestaltetes Layout, das eine einfache Bedienung gewährleistet.
+Das Skript befindet sich aktuell in der **aktiven Entwicklungsphase** und wird kontinuierlich erweitert und optimiert.
 
-*Funktionen:*
+---
 
-Individuelle Fahrzeugverzögerungen: Konfigurieren Sie die Ausrückverzögerungen für jedes Fahrzeug der aktuellen Wache direkt über die Sidebar.
+## ✨ Hauptfunktionen
 
-*Professionelles Design:* 
-Die Sidebar ist optisch ansprechend gestaltet und bietet eine klare und moderne Benutzeroberfläche.
-Speichern von Verzögerungen: Verzögerungen können über die „Speichern“-Schaltfläche oder durch Drücken der Enter-Taste in den Eingabefeldern gespeichert werden.
+- 🔧 **Individuelle Fahrzeugverzögerungen**  
+  Passen Sie die Ausrückverzögerungen **pro Fahrzeug** direkt über die Sidebar an – einfach, flexibel und in Echtzeit.
 
-*Benutzerfreundliche Bedienung:*
-Ein anpassbarer Button in der unteren rechten Ecke öffnet oder schließt die Sidebar. Eine Scrollfunktion ermöglicht es, auch lange Fahrzeuglisten effizient zu durchsuchen.
-Aktualitätsüberprüfung: Das Skript überprüft automatisch auf neue Versionen und benachrichtigt den Benutzer bei verfügbaren Updates.
+- 🎨 **Professionelles Design**  
+  Die Sidebar ist modern gestaltet, bietet eine klare Struktur und eine Scrollfunktion für lange Fahrzeuglisten.
 
-*Installation:*
-Fügen Sie dieses Skript zu Ihrem Browser mittels einer Tampermonkey- oder Greasemonkey-Erweiterung hinzu. Stellen Sie sicher, dass das Skript auf den relevanten Seiten von „Leitstellenspiel“ ausgeführt wird.
+- 💾 **Speicherfunktion**  
+  Verzögerungen können entweder über die **„Speichern“-Schaltfläche** oder durch **Drücken der Enter-Taste** gesichert werden.
 
-*Hinweis:*
-Für die optimale Funktion des Skripts sollte die Benutzeroberfläche des Spiels aktuell und kompatibel mit dem Skript sein. Es wird empfohlen, das Skript regelmäßig auf Updates zu überprüfen.
+- 🧭 **Benutzerfreundliche Steuerung**  
+  Ein Button in der unteren rechten Ecke öffnet oder schließt die Sidebar. Lange Fahrzeuglisten lassen sich schnell durchsuchen.
+
+- 🔄 **Versionsprüfung**  
+  Das Skript prüft automatisch auf **verfügbare Updates** und informiert den Nutzer entsprechend.
+
+---
+
+## 🛠️ Installation
+
+Dieses Skript kann mithilfe eines **UserScript-Managers** wie **Tampermonkey** oder **Greasemonkey** in Ihrem Browser installiert werden:
+
+1. Erweiterung (z. B. Tampermonkey) installieren  
+2. Skript einfügen und aktivieren  
+3. Sicherstellen, dass das Skript auf den Seiten von [Leitstellenspiel](https://www.leitstellenspiel.de) ausgeführt wird
+
+---
+
+## ⚠️ Hinweis
+
+Für eine optimale Nutzung sollte die Oberfläche des Spiels aktuell und mit dem Skript kompatibel sein.  
+Es wird empfohlen, regelmäßig nach Updates zu schauen, um von den neuesten Verbesserungen zu profitieren.
+
+---
+
+
+## ℹ️ Sonstige Informationen
+
+### 🧪 Aktueller Entwicklungsstand: Fehlerbehebung
+
+Aktuell befindet sich das Skript in der **Fehlerbehebungsphase**, insbesondere hinsichtlich der **Integration mit der Spielumgebung** von Leitstellenspiel.
+
+🔧 **Bekanntes Problem:**  
+Die **Kommunikation zwischen dem Skript und der Spiel-API** ist derzeit **nicht vollständig funktionsfähig**.  
+Es besteht ein Fehler in der **Verknüpfungslogik**, wodurch das Skript **nicht korrekt auf DOM-Elemente oder Spieldaten** zugreifen kann.
+
+➡️ **Technischer Hintergrund:**  
+Die fehlerhafte Implementierung betrifft die **Event Listener-Anbindung sowie die DOM-Abfrage für dynamisch geladene Inhalte**. Zudem gibt es Probleme mit der **Synchronisation der JavaScript-Ausführung mit den Ladevorgängen des Spiels**, was zu unvollständigen oder fehlerhaften Initialisierungen führt.
+
+Wir arbeiten aktiv an einer **Optimierung der Verbindungsschicht** zwischen Skript und Spiel (z. B. durch gezieltes DOM-Monitoring, asynchrone Initialisierung und API-kompatible Schnittstellenlogik).
+
+🛠️ Updates folgen zeitnah.
+
+---
+📬 **Feedback & Vorschläge**?  
+Eröffne gerne ein Issue oder schick einen Pull Request – wir freuen uns über Unterstützung und Ideen!
+
+
 
