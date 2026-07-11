@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      6.1.0
+// @version      6.2.0
 // @description  Zeigt alle Fahrzeuge der aktuellen Wache in einer Sidebar und ermöglicht das komfortable Bearbeiten der nativen "Ausrücke-Verzögerung" für alle Fahrzeuge an einer Stelle.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/*
@@ -33,7 +33,7 @@
     // zudem auf eine nicht existierende version.txt und lief nie).
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '6.1.0';
+    const CURRENT_VERSION = '6.2.0';
 
     // ---------------------------------------------------------------------
     // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
@@ -309,23 +309,46 @@
 
         // Aktuelle Werte kommen von der echten Fahrzeug-Bearbeiten-Seite -
         // parallel pro Fahrzeug nachladen, damit das Panel nicht blockiert.
-        await Promise.all(sorted.map(async fz => {
-            const input = document.getElementById(`avz-fz-${fz.id}`);
-            if (!input) return;
-            try {
-                const value = await readNativeDelay(fz.id);
-                input.value = String(value);
-                input.dataset.loadedValue = String(value);
-            } catch (error) {
-                input.placeholder = 'Fehler';
-                debugLog(`Ausrücke-Verzögerung für Fahrzeug ${fz.id} konnte nicht gelesen werden:`, error);
-            } finally {
-                input.disabled = false;
-            }
-        }));
+        await Promise.all(sorted.map(fz => loadDelayForRow(fz)));
     }
 
+    // Lädt (bzw. lädt erneut) den echten Wert für genau ein Fahrzeug.
+    // Wichtig: Bei einem Lesefehler bleibt das Feld deaktiviert und ohne
+    // gesetzten "loadedValue" - sonst würde saveDelays() das leere Feld als
+    // "geändert" werten und die echte Verzögerung im Spiel beim nächsten
+    // Speichern versehentlich auf 0 zurücksetzen.
+    async function loadDelayForRow(fz) {
+        const input = document.getElementById(`avz-fz-${fz.id}`);
+        if (!input) return;
+        const retryBtn = input.parentElement && input.parentElement.querySelector('.avz-retry');
+        if (retryBtn) retryBtn.remove();
+
+        input.disabled = true;
+        input.placeholder = 'Lädt...';
+        try {
+            const value = await readNativeDelay(fz.id);
+            input.value = String(value);
+            input.dataset.loadedValue = String(value);
+            input.disabled = false;
+        } catch (error) {
+            input.placeholder = 'Fehler beim Laden';
+            debugLog(`Ausrücke-Verzögerung für Fahrzeug ${fz.id} konnte nicht gelesen werden:`, error);
+
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'avz-retry';
+            retry.textContent = 'Erneut versuchen';
+            retry.addEventListener('click', () => loadDelayForRow(fz));
+            input.insertAdjacentElement('afterend', retry);
+        }
+    }
+
+    let saveInProgress = false;
+
     async function saveDelays(fahrzeuge) {
+        if (saveInProgress) return; // verhindert parallele Speicher-Requests bei Doppelklick/Enter+Klick
+        const saveButton = document.getElementById('saveDelays');
+
         const changed = fahrzeuge
             .map(fz => ({ fz, input: document.getElementById(`avz-fz-${fz.id}`) }))
             .filter(({ input }) => input && !input.disabled && input.value !== input.dataset.loadedValue);
@@ -335,28 +358,35 @@
             return;
         }
 
-        const results = await Promise.allSettled(changed.map(async ({ fz, input }) => {
-            const clamped = Math.min(Math.max(Number.parseInt(input.value, 10) || 0, 0), MAX_DELAY_SECONDS);
-            await writeNativeDelay(fz.id, clamped);
-            input.value = String(clamped);
-            input.dataset.loadedValue = String(clamped);
-        }));
+        saveInProgress = true;
+        if (saveButton) saveButton.disabled = true;
+        try {
+            const results = await Promise.allSettled(changed.map(async ({ fz, input }) => {
+                const clamped = Math.min(Math.max(Number.parseInt(input.value, 10) || 0, 0), MAX_DELAY_SECONDS);
+                await writeNativeDelay(fz.id, clamped);
+                input.value = String(clamped);
+                input.dataset.loadedValue = String(clamped);
+            }));
 
-        const failed = results.filter(r => r.status === 'rejected');
-        if (failed.length > 0) {
-            failed.forEach(r => debugLog('Speichern fehlgeschlagen:', r.reason));
-            showToast(
-                `Ausrückverzögerung: ${failed.length} von ${changed.length} Fahrzeugen konnten nicht gespeichert werden.`,
-                'error',
-                8000
-            );
-        }
-        const succeeded = changed.length - failed.length;
-        if (succeeded > 0) {
-            const feedback = document.getElementById('saveFeedback');
-            feedback.textContent = `${succeeded} Fahrzeug(e) gespeichert!`;
-            feedback.style.display = 'inline';
-            setTimeout(() => { feedback.style.display = 'none'; }, 2500);
+            const failed = results.filter(r => r.status === 'rejected');
+            if (failed.length > 0) {
+                failed.forEach(r => debugLog('Speichern fehlgeschlagen:', r.reason));
+                showToast(
+                    `Ausrückverzögerung: ${failed.length} von ${changed.length} Fahrzeugen konnten nicht gespeichert werden.`,
+                    'error',
+                    8000
+                );
+            }
+            const succeeded = changed.length - failed.length;
+            if (succeeded > 0) {
+                const feedback = document.getElementById('saveFeedback');
+                feedback.textContent = `${succeeded} Fahrzeug(e) gespeichert!`;
+                feedback.style.display = 'inline';
+                setTimeout(() => { feedback.style.display = 'none'; }, 2500);
+            }
+        } finally {
+            saveInProgress = false;
+            if (saveButton) saveButton.disabled = false;
         }
     }
 
@@ -491,6 +521,24 @@
         .btn-primary:hover {
             background-color: #2f8a46;
             border-color: #2f8a46;
+        }
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+        .avz-retry {
+            display: block;
+            margin-top: 4px;
+            background: none;
+            border: 1px solid #dc3545;
+            color: #ff8a95;
+            border-radius: 4px;
+            font-size: 11px;
+            padding: 2px 8px;
+            cursor: pointer;
+        }
+        .avz-retry:hover {
+            background-color: rgba(220, 53, 69, 0.15);
         }
         .avz-feedback {
             display: inline-block;
