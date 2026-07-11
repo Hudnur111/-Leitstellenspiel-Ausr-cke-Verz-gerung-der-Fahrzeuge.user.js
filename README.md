@@ -1,4 +1,4 @@
-# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v5.0.0)
+# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v5.1.0)
 
 **Autor:** Hudnur111 · IBoy · Coding Crew Tag 1  
 **Status:** In Entwicklung  
@@ -30,8 +30,8 @@ Es ergänzt die Spieloberfläche um eine moderne, benutzerfreundliche **Sidebar*
 - 🧭 **Benutzerfreundliche Steuerung**  
   Ein Button in der unteren rechten Ecke öffnet oder schließt die Sidebar.
 
-- 🔄 **Versionsprüfung**  
-  Das Skript prüft automatisch (höchstens alle 6 Stunden) auf **verfügbare Updates** und informiert den Nutzer entsprechend.
+- 🔄 **Automatische Updates**  
+  Tampermonkey prüft selbstständig (über `@updateURL`/`@downloadURL`), ob im GitHub-Repo eine neue Version vorliegt, und installiert sie automatisch – kein manuelles Nachschauen nötig.
 
 ---
 
@@ -54,7 +54,15 @@ Es wird empfohlen, regelmäßig nach Updates zu schauen, um von den neuesten Ver
 
 ## ℹ️ Sonstige Informationen
 
-### 🧪 Aktueller Entwicklungsstand (v5.0.0)
+### 🧪 Aktueller Entwicklungsstand (v5.1.0)
+
+**Automatische Updates (v5.1.0):** Das Skript enthält jetzt `@updateURL`/`@downloadURL` im Header. Tampermonkey prüft damit selbstständig (Standardeinstellung: periodisch im Hintergrund), ob sich `@version` in der `main`-Branch-Datei erhöht hat, und installiert neue Versionen automatisch. Voraussetzungen dafür:
+
+1. Änderungen müssen in den `main`-Branch des Repos gemergt sein (nicht nur in einen Feature-Branch) – nur davon liest Tampermonkey.
+2. In Tampermonkey unter *Einstellungen → Update* muss die automatische Update-Prüfung aktiviert sein (Standard: an).
+3. Nach dem Einspielen dieser Version einmalig das Skript neu installieren bzw. in Tampermonkey unter *Dashboard → Skript → Updates prüfen* einmal manuell aktualisieren, damit die neuen `@updateURL`-Angaben übernommen werden. Ab dann läuft es automatisch.
+
+Der bisherige eigene Update-Check per `GM_xmlhttpRequest` wurde entfernt – er zeigte auf eine nicht existierende `version.txt` und hat nie funktioniert. `@updateURL`/`@downloadURL` sind der Standard-Mechanismus von Tampermonkey/Greasemonkey und robuster.
 
 Leitstellenspiel kennt **serverseitig keine Ausrückverzögerung** – diese Funktion existiert im Spiel selbst nicht. Bis Version 3.1 hat das Skript die eingestellte Verzögerung nur in `localStorage` gespeichert, ohne dass sie irgendeinen Effekt im Spiel hatte.
 

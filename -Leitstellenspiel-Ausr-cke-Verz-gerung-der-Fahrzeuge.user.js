@@ -1,17 +1,16 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      5.0.0
+// @version      5.1.0
 // @description  Zeigt Fahrzeuge der aktuellen Wache, ermöglicht die Konfiguration einer Ausrückverzögerung pro Fahrzeug und verzögert das tatsächliche Alarmieren im Spiel um die eingestellte Zeit.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/*
 // @match        https://leitstellenspiel.de/*
 // @icon         https://cdn-icons-png.flaticon.com/512/3135/3135715.png
 // @license      GPL-3.0-or-later
+// @updateURL    https://raw.githubusercontent.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js/main/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js
+// @downloadURL  https://raw.githubusercontent.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js/main/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js
 // @grant        GM_addStyle
-// @grant        GM_notification
-// @grant        GM_xmlhttpRequest
-// @connect      raw.githubusercontent.com
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -24,51 +23,17 @@
     window.__lssAusrueckverzoegerungLoaded = true;
 
     // ---------------------------------------------------------------------
-    // Skriptinformationen / Update-Check
+    // Skriptinformationen
+    //
+    // Automatische Updates laufen über die @updateURL/@downloadURL-Angaben
+    // im Header (Tampermonkey-Bordmittel): der Manager prüft von sich aus
+    // periodisch, ob sich @version in der main-Branch-Datei erhöht hat,
+    // und installiert die neue Fassung automatisch. Ein eigener
+    // GM_xmlhttpRequest-Check ist dafür nicht nötig (der bisherige zeigte
+    // zudem auf eine nicht existierende version.txt und lief nie).
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '5.0.0';
-    const UPDATE_URL = 'https://github.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js/raw/main/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js';
-    const VERSION_URL = 'https://raw.githubusercontent.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge/main/version.txt';
-    const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // alle 6 Stunden, nicht bei jedem Seitenaufruf
-    const LAST_CHECK_KEY = 'lss_avz_last_update_check';
-
-    function checkForUpdate() {
-        if (typeof GM_xmlhttpRequest !== 'function') return;
-
-        const lastCheck = Number(localStorage.getItem(LAST_CHECK_KEY) || 0);
-        if (Date.now() - lastCheck < UPDATE_CHECK_INTERVAL_MS) return;
-        localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
-
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url: VERSION_URL,
-            onload(response) {
-                if (response.status === 200) {
-                    const latestVersion = response.responseText.trim();
-                    if (latestVersion && latestVersion !== CURRENT_VERSION) {
-                        notifyUserForUpdate(latestVersion);
-                    }
-                } else {
-                    console.warn(`[${SCRIPT_NAME}] Versionsprüfung fehlgeschlagen: ${response.status} ${response.statusText}`);
-                }
-            },
-            onerror() {
-                console.warn(`[${SCRIPT_NAME}] Versionsprüfung: Server nicht erreichbar.`);
-            }
-        });
-    }
-
-    function notifyUserForUpdate(latestVersion) {
-        if (typeof GM_notification !== 'function') return;
-        GM_notification({
-            text: `${SCRIPT_NAME} (Version ${latestVersion}) ist verfügbar. Jetzt aktualisieren!`,
-            title: 'Neue Version verfügbar',
-            onclick() {
-                window.open(UPDATE_URL, '_blank');
-            }
-        });
-    }
+    const CURRENT_VERSION = '5.1.0';
 
     // ---------------------------------------------------------------------
     // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
@@ -653,7 +618,6 @@
     `);
 
     migrateLegacyDelays();
-    checkForUpdate();
 
     // Da Wachen/Fahrzeuge als AJAX-Overlay ohne URL-Wechsel angezeigt
     // werden, gibt es kein "Seite geladen"-Ereignis dafür - stattdessen
