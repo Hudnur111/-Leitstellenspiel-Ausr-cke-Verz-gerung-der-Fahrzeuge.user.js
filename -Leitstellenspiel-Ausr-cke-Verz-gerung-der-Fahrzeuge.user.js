@@ -498,45 +498,54 @@
     // ---------------------------------------------------------------------
     // Styles
     // ---------------------------------------------------------------------
+    // Farben/Look an die dunkle Leitstellenspiel-Oberfläche angelehnt
+    // (dunkle Panels, helle Schrift, blaue Akzentfarbe für Buttons).
     GM_addStyle(`
         #avzToggleButton {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            z-index: 1000;
-            background-color: #007bff;
+            z-index: 10000;
+            background-color: #3b82f6;
             color: #fff;
             border: none;
             padding: 10px 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.5);
             cursor: pointer;
         }
         #avzToggleButton:hover {
-            background-color: #0056b3;
+            background-color: #2563eb;
         }
         #vehicleSidebar {
             position: fixed;
             top: 100px;
             right: 10px;
-            width: 350px;
+            width: 360px;
             max-height: 70vh;
             overflow-y: auto;
-            background-color: #f8f9fa;
-            color: #212529;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            padding: 15px 20px 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            z-index: 1000;
+            background-color: #1b1f27;
+            color: #e8e8e8;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px;
+            padding: 16px 20px 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+            z-index: 10000;
+            font-size: 14px;
         }
         #vehicleSidebar .avz-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px;
         }
         #vehicleSidebar .avz-header h4 {
             margin: 0;
+            font-size: 16px;
+            color: #fff;
         }
         #avzCloseButton {
             background: none;
@@ -544,59 +553,65 @@
             font-size: 22px;
             line-height: 1;
             cursor: pointer;
-            color: #666;
+            color: #9aa0a6;
         }
         #avzCloseButton:hover {
-            color: #000;
+            color: #fff;
         }
         #vehicleSidebar .avz-hint {
             font-size: 12px;
-            color: #666;
-            margin: 8px 0 12px;
-        }
-        #vehicleSidebar input {
-            margin-bottom: 10px;
+            color: #9aa0a6;
+            margin: 10px 0 14px;
         }
         .btn-primary {
-            background-color: #007bff;
-            border-color: #007bff;
+            background-color: #3b82f6;
+            border-color: #3b82f6;
             padding: 8px 16px;
-            color: white;
-            border-radius: 4px;
-            border: 1px solid #007bff;
+            color: #fff;
+            border-radius: 5px;
+            border: 1px solid #3b82f6;
             cursor: pointer;
+            font-weight: bold;
         }
         .btn-primary:hover {
-            background-color: #0056b3;
-            border-color: #004085;
+            background-color: #2563eb;
+            border-color: #2563eb;
         }
         .avz-feedback {
             display: inline-block;
             margin-left: 10px;
-            color: #28a745;
+            color: #3ddc84;
         }
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 14px;
         }
         .form-group label {
             display: block;
             font-weight: bold;
+            color: #cfd3d8;
+            margin-bottom: 4px;
         }
         .form-group input {
             width: 100%;
             padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            background-color: #11141a;
+            color: #fff;
+            border: 1px solid #3a3f4b;
+            border-radius: 5px;
             box-sizing: border-box;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
         }
         .avz-countdown-badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
             font-size: 12px;
-            color: #856404;
-            background-color: #fff3cd;
-            border: 1px solid #ffeeba;
+            color: #ffcf5c;
+            background-color: rgba(255, 193, 7, 0.12);
+            border: 1px solid rgba(255, 193, 7, 0.4);
             border-radius: 4px;
             padding: 2px 6px;
             margin-left: 4px;
@@ -618,19 +633,19 @@
             bottom: 70px;
             right: 20px;
             max-width: 320px;
-            z-index: 1001;
+            z-index: 10001;
             padding: 10px 14px;
-            border-radius: 5px;
+            border-radius: 6px;
             font-size: 13px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
             color: #fff;
         }
         .avz-toast-info {
-            background-color: #007bff;
+            background-color: #3b82f6;
         }
         .avz-toast-warning {
             background-color: #e0a800;
-            color: #212529;
+            color: #1b1f27;
         }
         .avz-toast-error {
             background-color: #dc3545;
