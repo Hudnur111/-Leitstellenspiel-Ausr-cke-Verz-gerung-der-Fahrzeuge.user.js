@@ -1,4 +1,4 @@
-# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v3.1)
+# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v6.0.0)
 
 **Autor:** Hudnur111 · IBoy · Coding Crew Tag 1  
 **Status:** In Entwicklung  
@@ -8,29 +8,26 @@
 
 ## 📌 Beschreibung
 
-Dieses **Benutzerskript** für das Spiel **Leitstellenspiel** bietet eine erweiterte Möglichkeit zur **individuellen Konfiguration von Ausrückverzögerungen** für Fahrzeuge **einer einzelnen Wache**.  
-Es ergänzt die Spieloberfläche um eine moderne, benutzerfreundliche **Sidebar**, mit der alle Verzögerungen übersichtlich und intuitiv angepasst werden können.
-
-Das Skript befindet sich aktuell in der **aktiven Entwicklungsphase** und wird kontinuierlich erweitert und optimiert.
+Dieses **Benutzerskript** für das Spiel **Leitstellenspiel** zeigt alle Fahrzeuge der aktuellen Wache in einer übersichtlichen Sidebar und macht die native **„Ausrücke-Verzögerung"** jedes Fahrzeugs (Zeit in Sekunden, bis es nach der Alarmierung die Wache verlässt) an einer zentralen Stelle bearbeitbar, statt jedes Fahrzeug einzeln über „Fahrzeug bearbeiten“ öffnen zu müssen.
 
 ---
 
 ## ✨ Hauptfunktionen
 
-- 🔧 **Individuelle Fahrzeugverzögerungen**  
-  Passen Sie die Ausrückverzögerungen **pro Fahrzeug** direkt über die Sidebar an – einfach, flexibel und in Echtzeit.
+- 🔧 **Alle Fahrzeuge einer Wache an einer Stelle**  
+  Sidebar zeigt jedes Fahrzeug der aktuell geöffneten Wache mit seiner echten, aktuellen Ausrücke-Verzögerung.
 
-- 🎨 **Professionelles Design**  
-  Die Sidebar ist modern gestaltet, bietet eine klare Struktur und eine Scrollfunktion für lange Fahrzeuglisten.
+- 💾 **Schreibt direkt in die native Spiel-Einstellung**  
+  Beim Speichern wird die echte „Fahrzeug bearbeiten“-Seite im Hintergrund abgerufen und mit dem neuen Wert erneut abgeschickt – alle anderen Felder (Funkrufname, Personenanzahl, Arbeitszeiten, …) bleiben unverändert.
 
-- 💾 **Speicherfunktion**  
-  Verzögerungen können entweder über die **„Speichern“-Schaltfläche** oder durch **Drücken der Enter-Taste** gesichert werden.
+- 🎨 **Dunkles Design passend zur Spieloberfläche**  
+  Sidebar und Buttons sind an den dunklen Look von Leitstellenspiel angelehnt.
 
 - 🧭 **Benutzerfreundliche Steuerung**  
-  Ein Button in der unteren rechten Ecke öffnet oder schließt die Sidebar. Lange Fahrzeuglisten lassen sich schnell durchsuchen.
+  Ein Button in der unteren rechten Ecke öffnet oder schließt die Sidebar.
 
-- 🔄 **Versionsprüfung**  
-  Das Skript prüft automatisch auf **verfügbare Updates** und informiert den Nutzer entsprechend.
+- 🔄 **Automatische Updates**  
+  Tampermonkey prüft selbstständig (über `@updateURL`/`@downloadURL`), ob im GitHub-Repo eine neue Version vorliegt, und installiert sie automatisch – kein manuelles Nachschauen nötig.
 
 ---
 
@@ -38,7 +35,7 @@ Das Skript befindet sich aktuell in der **aktiven Entwicklungsphase** und wird k
 
 Dieses Skript kann mithilfe eines **UserScript-Managers** wie **Tampermonkey** oder **Greasemonkey** in Ihrem Browser installiert werden:
 
-1. Erweiterung (z. B. Tampermonkey) installieren  
+1. Erweiterung (z. B. Tampermonkey) installieren  
 2. Skript einfügen und aktivieren  
 3. Sicherstellen, dass das Skript auf den Seiten von [Leitstellenspiel](https://www.leitstellenspiel.de) ausgeführt wird
 
@@ -51,27 +48,26 @@ Es wird empfohlen, regelmäßig nach Updates zu schauen, um von den neuesten Ver
 
 ---
 
-
 ## ℹ️ Sonstige Informationen
 
-### 🧪 Aktueller Entwicklungsstand: Fehlerbehebung
+### 🧪 Aktueller Entwicklungsstand (v6.0.0)
 
-Aktuell befindet sich das Skript in der **Fehlerbehebungsphase**, insbesondere hinsichtlich der **Integration mit der Spielumgebung** von Leitstellenspiel.
+**Wichtigste Erkenntnis:** Leitstellenspiel hat die Ausrücke-Verzögerung **bereits eingebaut** – als Feld auf der nativen „Fahrzeug bearbeiten“-Seite (`/vehicles/<id>/edit`). Die Versionen bis v5.x haben das nicht genutzt, sondern versucht, das Alarmieren selbst über einen abgefangenen Klick zu verzögern (clientseitiger Nachbau) bzw. den Wert nur lokal in `localStorage` zu speichern – beides ohne echten Effekt im Spiel.
 
-🔧 **Bekanntes Problem:**  
-Die **Kommunikation zwischen dem Skript und der Spiel-API** ist derzeit **nicht vollständig funktionsfähig**.  
-Es besteht ein Fehler in der **Verknüpfungslogik**, wodurch das Skript **nicht korrekt auf DOM-Elemente oder Spieldaten** zugreifen kann.
+Seit v6.0.0 schreibt das Skript stattdessen direkt in das native Feld:
 
-➡️ **Technischer Hintergrund:**  
-Die fehlerhafte Implementierung betrifft die **Event Listener-Anbindung sowie die DOM-Abfrage für dynamisch geladene Inhalte**. Zudem gibt es Probleme mit der **Synchronisation der JavaScript-Ausführung mit den Ladevorgängen des Spiels**, was zu unvollständigen oder fehlerhaften Initialisierungen führt.
+1. Für jedes Fahrzeug der Wache wird die echte Bearbeiten-Seite im Hintergrund per `fetch` geladen und der aktuelle Wert aus dem Feld mit dem Label „Ausrücke-Verzögerung“ ausgelesen (nicht anhand eines geratenen Feldnamens, sondern über den sichtbaren Text).
+2. Beim Speichern wird nur für **geänderte** Fahrzeuge das komplette native Formular (inkl. CSRF-Token und allen anderen Feldern unverändert) mit dem neuen Wert erneut abgeschickt.
+3. Automatisiert gegen eine nachgebaute Kopie der echten Bearbeiten-Seite getestet: Lesen funktioniert, nur geänderte Fahrzeuge werden gespeichert, alle anderen Formularfelder bleiben nachweislich unangetastet.
 
-Wir arbeiten aktiv an einer **Optimierung der Verbindungsschicht** zwischen Skript und Spiel (z. B. durch gezieltes DOM-Monitoring, asynchrone Initialisierung und API-kompatible Schnittstellenlogik).
+Damit entfällt der gesamte bisherige Klick-Interception-Mechanismus samt Countdown-Anzeige – nicht mehr nötig, da das Spiel die Verzögerung selbst korrekt umsetzt, sobald das native Feld gesetzt ist.
 
-🛠️ Updates folgen zeitnah.
+**Frühere Erkenntnis (weiterhin relevant für die Wachen-Erkennung):** Leitstellenspiel öffnet Wachen als AJAX-Overlay, **ohne die Browser-URL zu wechseln**. Die aktuell angezeigte Wache wird daher über ihren sichtbaren Namen (Überschrift im Overlay) erkannt und mit `/api/buildings` bzw. `/api/vehicles` abgeglichen; ein `MutationObserver` beobachtet das Overlay laufend, da es ohne klassischen Seitenwechsel per AJAX nachlädt.
+
+⚠️ **Bekannte Einschränkung:** Die Erkennung des Verzögerungs-Feldes basiert auf dem sichtbaren Label-Text „Ausrücke-Verzögerung“. Ändert sich dieser Text im Spiel grundlegend, kann das Feld nicht gefunden werden – dann erscheint eine Fehlermeldung im Panel statt eines falschen Speicherversuchs. Zum Debuggen `window.__lssAvzDebug = true` in der Browser-Konsole setzen.
+
+🛠️ Rückmeldungen zum Live-Verhalten sind willkommen.
 
 ---
 📬 **Feedback & Vorschläge**?  
 Eröffne gerne ein Issue oder schick einen Pull Request – wir freuen uns über Unterstützung und Ideen!
-
-
-
