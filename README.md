@@ -1,4 +1,4 @@
-# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v4.0.0)
+# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v5.0.0)
 
 **Autor:** Hudnur111 · IBoy · Coding Crew Tag 1  
 **Status:** In Entwicklung  
@@ -54,20 +54,29 @@ Es wird empfohlen, regelmäßig nach Updates zu schauen, um von den neuesten Ver
 
 ## ℹ️ Sonstige Informationen
 
-### 🧪 Aktueller Entwicklungsstand (v4.0.0)
+### 🧪 Aktueller Entwicklungsstand (v5.0.0)
 
-Leitstellenspiel kennt **serverseitig keine Ausrückverzögerung** – diese Funktion existiert im Spiel selbst nicht (siehe Forendiskussionen dazu). Bis Version 3.1 hat das Skript die eingestellte Verzögerung nur in `localStorage` gespeichert, ohne dass sie irgendeinen Effekt im Spiel hatte – die Kernfunktion war faktisch ein Platzhalter.
+Leitstellenspiel kennt **serverseitig keine Ausrückverzögerung** – diese Funktion existiert im Spiel selbst nicht. Bis Version 3.1 hat das Skript die eingestellte Verzögerung nur in `localStorage` gespeichert, ohne dass sie irgendeinen Effekt im Spiel hatte.
 
-Ab v4.0.0 fängt das Skript den echten Alarmieren-Klick im Spiel ab (Rails-UJS-Link auf `/vehicles/<id>/...`) und verzögert ihn aktiv um die konfigurierte Zeit, inklusive sichtbarem Countdown und Abbrechen-Option. Außerdem wurde behoben:
+**Wichtige Erkenntnis in v5.0.0:** Leitstellenspiel öffnet Wachen und Fahrzeuge als AJAX-Overlay, **ohne die Browser-URL zu wechseln**. Das Skript hat sich bis v4.1.0 auf `window.location.pathname` (`/buildings/123`) verlassen, das in der echten Spieloberfläche nie zutrifft – deshalb hat das Skript nie reagiert.
 
-- Falscher API-Endpunkt (`/api/buildings/{id}/vehicles` existiert nicht) → jetzt `/api/vehicles`, gefiltert nach Wache
+Seit v5.0.0:
+
+- Die aktuell angezeigte Wache/das Fahrzeug wird über den **sichtbaren Namen** (Überschrift im Overlay) erkannt und mit `/api/buildings` bzw. `/api/vehicles` abgeglichen – unabhängig von der URL
+- Ein `MutationObserver` beobachtet das Overlay laufend, da es ohne klassischen Seitenwechsel per AJAX nachlädt
+- Der „Alarmieren“-Button wird über seinen sichtbaren Text erkannt (nicht mehr über einen geratenen Link-Aufbau)
+- `@match` gilt jetzt für die komplette Domain (`leitstellenspiel.de/*`), damit das Skript unabhängig vom Overlay-Zustand aktiv ist
+
+Außerdem wurde behoben:
+
+- Falscher API-Endpunkt (`/api/buildings/{id}/vehicles` existiert nicht) → jetzt `/api/vehicles` und `/api/buildings`
 - Versionsprüfung lief bei **jedem** Seitenaufruf gegen GitHub → jetzt auf alle 6 Stunden gedrosselt
-- Fehlende Fehlerrückmeldung im UI bei fehlgeschlagenem Laden der Fahrzeuge
+- Fehlende Fehlerrückmeldung im UI bei fehlgeschlagenem Laden der Fahrzeuge → sichtbare Toast-Meldungen
 - Bestehende Verzögerungen aus v3.1 werden beim ersten Start automatisch migriert
 
-⚠️ **Bekannte Einschränkung:** Der genaue Aufbau des „Alarmieren"-Links konnte ohne Zugriff auf einen eingeloggten Testaccount nicht live verifiziert werden. Greift die Erkennung nicht, rückt das Fahrzeug wie gewohnt ohne Verzögerung aus (kein Absturz, kein Blockieren). Zum Debuggen `window.__lssAvzDebug = true` in der Browser-Konsole setzen – dort wird jeder erkannte/ignorierte Link geloggt.
+⚠️ **Bekannte Einschränkung:** Die Erkennung basiert auf sichtbarem Text (Wachen-/Fahrzeugname, Button-Beschriftung „Alarmieren"). Weicht das Overlay strukturell stark ab, kann die Zuordnung fehlschlagen – dann greift keine Verzögerung, aber das Fahrzeug rückt wie gewohnt aus (kein Absturz). Zum Debuggen `window.__lssAvzDebug = true` in der Browser-Konsole setzen.
 
-🛠️ Rückmeldungen zum Live-Verhalten (insbesondere ob der Countdown beim Alarmieren erscheint) sind willkommen.
+🛠️ Rückmeldungen zum Live-Verhalten sind willkommen.
 
 ---
 📬 **Feedback & Vorschläge**?  

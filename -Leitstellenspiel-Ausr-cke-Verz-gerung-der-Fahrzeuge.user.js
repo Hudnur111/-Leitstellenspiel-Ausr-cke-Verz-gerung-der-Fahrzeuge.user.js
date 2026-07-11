@@ -1,13 +1,11 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      4.1.0
+// @version      5.0.0
 // @description  Zeigt Fahrzeuge der aktuellen Wache, ermöglicht die Konfiguration einer Ausrückverzögerung pro Fahrzeug und verzögert das tatsächliche Alarmieren im Spiel um die eingestellte Zeit.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
-// @match        https://www.leitstellenspiel.de/buildings/*
-// @match        https://leitstellenspiel.de/buildings/*
-// @match        https://www.leitstellenspiel.de/missions/*
-// @match        https://leitstellenspiel.de/missions/*
+// @match        https://www.leitstellenspiel.de/*
+// @match        https://leitstellenspiel.de/*
 // @icon         https://cdn-icons-png.flaticon.com/512/3135/3135715.png
 // @license      GPL-3.0-or-later
 // @grant        GM_addStyle
@@ -29,7 +27,7 @@
     // Skriptinformationen / Update-Check
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '4.1.0';
+    const CURRENT_VERSION = '5.0.0';
     const UPDATE_URL = 'https://github.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js/raw/main/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js';
     const VERSION_URL = 'https://raw.githubusercontent.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge/main/version.txt';
     const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // alle 6 Stunden, nicht bei jedem Seitenaufruf
@@ -130,14 +128,23 @@
     }
 
     // ---------------------------------------------------------------------
-    // Sidebar zur Konfiguration der Verzögerungen (nur auf /buildings/*)
+    // Sidebar zur Konfiguration der Verzögerungen
+    //
+    // Leitstellenspiel öffnet Wachen/Fahrzeuge als AJAX-Overlay, OHNE die
+    // Browser-URL zu wechseln - `window.location.pathname` bleibt dabei
+    // unverändert. Die aktuell angezeigte Wache lässt sich daher nicht aus
+    // der URL bestimmen, sondern nur aus dem sichtbaren Seiteninhalt: der
+    // Name der Wache (z.B. "THW Schwäbisch Gmünd") wird als Überschrift
+    // angezeigt und mit den Fahrzeug-/Gebäudedaten aus der API abgeglichen.
     // ---------------------------------------------------------------------
     const VEHICLE_ENDPOINTS = ['/api/vehicles', '/api/vehicles.json'];
+    const BUILDING_ENDPOINTS = ['/api/buildings', '/api/buildings.json'];
     const BUILDING_ID_FIELDS = ['building_id', 'caserne_id', 'station_id'];
+    const INDEX_CACHE_TTL_MS = 60 * 1000;
 
-    async function fetchAlleFahrzeuge() {
+    async function fetchJsonList(endpoints) {
         let lastError = null;
-        for (const url of VEHICLE_ENDPOINTS) {
+        for (const url of endpoints) {
             try {
                 const response = await fetch(url, {
                     credentials: 'same-origin',
@@ -151,61 +158,71 @@
                 if (Array.isArray(data)) return data;
                 if (data && Array.isArray(data.result)) return data.result;
                 if (data && Array.isArray(data.vehicles)) return data.vehicles;
+                if (data && Array.isArray(data.buildings)) return data.buildings;
                 lastError = new Error(`${url} → unerwartetes Antwortformat: ${JSON.stringify(data).slice(0, 200)}`);
             } catch (error) {
                 lastError = error;
             }
         }
-        throw lastError || new Error('Kein Fahrzeug-Endpunkt konnte erreicht werden.');
+        throw lastError || new Error(`Keiner der Endpunkte (${endpoints.join(', ')}) konnte erreicht werden.`);
+    }
+
+    let vehiclesIndexCache = null;
+    let vehiclesIndexCacheAt = 0;
+    async function getVehiclesIndex(forceRefresh = false) {
+        if (!forceRefresh && vehiclesIndexCache && (Date.now() - vehiclesIndexCacheAt) < INDEX_CACHE_TTL_MS) {
+            return vehiclesIndexCache;
+        }
+        vehiclesIndexCache = await fetchJsonList(VEHICLE_ENDPOINTS);
+        vehiclesIndexCacheAt = Date.now();
+        debugLog(`${vehiclesIndexCache.length} Fahrzeuge von der API geladen.`);
+        return vehiclesIndexCache;
+    }
+
+    let buildingsIndexCache = null;
+    let buildingsIndexCacheAt = 0;
+    async function getBuildingsIndex(forceRefresh = false) {
+        if (!forceRefresh && buildingsIndexCache && (Date.now() - buildingsIndexCacheAt) < INDEX_CACHE_TTL_MS) {
+            return buildingsIndexCache;
+        }
+        buildingsIndexCache = await fetchJsonList(BUILDING_ENDPOINTS);
+        buildingsIndexCacheAt = Date.now();
+        debugLog(`${buildingsIndexCache.length} Gebäude von der API geladen.`);
+        return buildingsIndexCache;
     }
 
     function findBuildingIdField(fahrzeuge) {
         return BUILDING_ID_FIELDS.find(field => fahrzeuge.some(fz => fz[field] !== undefined));
     }
 
-    async function loadFahrzeuge() {
-        const match = window.location.pathname.match(/^\/buildings\/(\d+)/);
-        if (!match) return;
-        const wacheId = Number(match[1]);
-
-        try {
-            const alleFahrzeuge = await fetchAlleFahrzeuge();
-            debugLog(`${alleFahrzeuge.length} Fahrzeuge insgesamt von der API erhalten.`);
-
-            const buildingField = findBuildingIdField(alleFahrzeuge);
-            let fahrzeuge;
-            if (buildingField) {
-                fahrzeuge = alleFahrzeuge.filter(fz => Number(fz[buildingField]) === wacheId);
-            } else {
-                // Feldname unbekannt/abweichend: lieber alle Fahrzeuge zeigen
-                // als das Skript unsichtbar nichts tun zu lassen.
-                showToast(
-                    'Ausrückverzögerung: Wache konnte nicht anhand der Fahrzeugdaten gefiltert werden - zeige alle Fahrzeuge. Bitte melden!',
-                    'warning',
-                    10000
-                );
-                fahrzeuge = alleFahrzeuge;
-            }
-
-            fahrzeuge = fahrzeuge.slice().sort((a, b) => (a.caption || '').localeCompare(b.caption || ''));
-
-            if (fahrzeuge.length === 0) {
-                showToast(
-                    `Ausrückverzögerung: Keine Fahrzeuge für Wache ${wacheId} gefunden (von ${alleFahrzeuge.length} insgesamt).`,
-                    'warning',
-                    8000
-                );
-                return;
-            }
-
-            createSidebar(fahrzeuge);
-        } catch (error) {
-            console.error(`[${SCRIPT_NAME}] Fehler beim Laden der Fahrzeuge:`, error);
-            showToast(`Ausrückverzögerung: Fahrzeuge konnten nicht geladen werden (${error.message}).`, 'error', 12000);
+    // Sucht unter allen Überschriften-ähnlichen Elementen der Seite nach
+    // einem Text, der exakt dem "caption"-Feld eines Eintrags entspricht.
+    // Robuster als das Raten von CSS-Klassen, da der Name im Spiel immer
+    // sichtbar als Überschrift/Titel angezeigt wird.
+    function findEntityByVisibleCaption(entities) {
+        if (!entities || entities.length === 0) return null;
+        const captionMap = new Map();
+        entities.forEach(entity => {
+            if (entity.caption) captionMap.set(entity.caption.trim(), entity);
+        });
+        const headingEls = document.querySelectorAll('h1, h2, h3, h4, .modal-title, .panel-title, .box-title, strong');
+        for (const el of headingEls) {
+            const text = el.textContent.trim();
+            if (text && captionMap.has(text)) return captionMap.get(text);
         }
+        return null;
     }
 
-    function createSidebar(fahrzeuge) {
+    const sidebarState = {
+        toggleButton: null,
+        sidebar: null,
+        fahrzeugList: null,
+        currentBuildingId: null
+    };
+
+    function ensureSidebarShell() {
+        if (sidebarState.sidebar) return sidebarState;
+
         const toggleButton = document.createElement('button');
         toggleButton.id = 'avzToggleButton';
         toggleButton.type = 'button';
@@ -217,7 +234,7 @@
         sidebar.style.display = 'none';
         sidebar.innerHTML = `
             <div class="avz-header">
-                <h4>Fahrzeug-Ausrück-Verzögerung</h4>
+                <h4 id="avzSidebarTitle">Fahrzeug-Ausrück-Verzögerung</h4>
                 <button type="button" id="avzCloseButton" aria-label="Schließen">&times;</button>
             </div>
             <p class="avz-hint">Verzögerung in Sekunden je Fahrzeug. Bei 0 wird sofort alarmiert.</p>
@@ -227,9 +244,27 @@
         `;
         document.body.appendChild(sidebar);
 
-        const fahrzeugList = sidebar.querySelector('#fahrzeugVerzoegerungList');
+        sidebar.querySelector('#avzCloseButton').addEventListener('click', () => {
+            sidebar.style.display = 'none';
+        });
+        toggleButton.addEventListener('click', () => {
+            sidebar.style.display = (sidebar.style.display === 'none') ? 'block' : 'none';
+        });
 
-        fahrzeuge.forEach(fz => {
+        sidebarState.toggleButton = toggleButton;
+        sidebarState.sidebar = sidebar;
+        sidebarState.fahrzeugList = sidebar.querySelector('#fahrzeugVerzoegerungList');
+        return sidebarState;
+    }
+
+    function populateSidebar(building, fahrzeuge) {
+        const { sidebar, fahrzeugList } = ensureSidebarShell();
+        sidebar.querySelector('#avzSidebarTitle').textContent = `Ausrück-Verzögerung: ${building.caption}`;
+        fahrzeugList.innerHTML = '';
+
+        const sorted = fahrzeuge.slice().sort((a, b) => (a.caption || '').localeCompare(b.caption || ''));
+
+        sorted.forEach(fz => {
             const label = fz.vehicle_type_caption || fz.caption || `Fahrzeug #${fz.id}`;
             const fzItem = document.createElement('div');
             fzItem.className = 'form-group';
@@ -253,21 +288,14 @@
             fahrzeugList.appendChild(fzItem);
         });
 
-        sidebar.querySelector('#saveDelays').addEventListener('click', () => saveDelays(fahrzeuge));
-        sidebar.querySelector('#avzCloseButton').addEventListener('click', () => {
-            sidebar.style.display = 'none';
-        });
-
-        toggleButton.addEventListener('click', () => {
-            sidebar.style.display = (sidebar.style.display === 'none') ? 'block' : 'none';
-        });
-
-        fahrzeugList.addEventListener('keypress', (e) => {
+        const saveButton = sidebar.querySelector('#saveDelays');
+        saveButton.onclick = () => saveDelays(sorted);
+        fahrzeugList.onkeypress = (e) => {
             if (e.key === 'Enter' && e.target.classList.contains('delayInput')) {
                 e.preventDefault();
-                saveDelays(fahrzeuge);
+                saveDelays(sorted);
             }
-        });
+        };
     }
 
     function saveDelays(fahrzeuge) {
@@ -283,46 +311,108 @@
         setTimeout(() => { feedback.style.display = 'none'; }, 2000);
     }
 
+    // Wird von der Alarmieren-Erkennung (weiter unten) genutzt, falls sich
+    // die Fahrzeug-ID nicht direkt aus der Tabellenzeile des geklickten
+    // Buttons ableiten lässt (z.B. auf der Einzelfahrzeug-Ansicht, auf der
+    // alle "Alarmieren"-Buttons zum selben, aktuell angezeigten Fahrzeug
+    // gehören).
+    let currentVehicleIdGuess = null;
+
+    // Wird bei jeder relevanten DOM-Änderung erneut ausgeführt, um zu
+    // erkennen, ob gerade eine Wache oder ein Fahrzeug angezeigt wird -
+    // da sich weder URL noch ein "Seitenwechsel"-Event dafür eignen.
+    async function refreshForCurrentView() {
+        try {
+            const vehicles = await getVehiclesIndex();
+            const currentVehicle = findEntityByVisibleCaption(vehicles);
+            currentVehicleIdGuess = currentVehicle ? currentVehicle.id : null;
+
+            const buildings = await getBuildingsIndex();
+            const building = findEntityByVisibleCaption(buildings);
+            if (!building || building.id === sidebarState.currentBuildingId) return;
+
+            const buildingField = findBuildingIdField(vehicles);
+            let fahrzeuge;
+            if (buildingField) {
+                fahrzeuge = vehicles.filter(fz => Number(fz[buildingField]) === Number(building.id));
+            } else {
+                showToast(
+                    'Ausrückverzögerung: Wache konnte nicht anhand der Fahrzeugdaten gefiltert werden - zeige alle Fahrzeuge. Bitte melden!',
+                    'warning',
+                    10000
+                );
+                fahrzeuge = vehicles;
+            }
+
+            if (fahrzeuge.length === 0) {
+                showToast(
+                    `Ausrückverzögerung: Keine Fahrzeuge für Wache "${building.caption}" gefunden.`,
+                    'warning',
+                    8000
+                );
+                return;
+            }
+
+            populateSidebar(building, fahrzeuge);
+            sidebarState.currentBuildingId = building.id;
+            debugLog(`Wache erkannt: ${building.caption} (#${building.id}), ${fahrzeuge.length} Fahrzeuge.`);
+        } catch (error) {
+            debugLog('Fehler bei refreshForCurrentView:', error);
+        }
+    }
+
+    function debounce(fn, waitMs) {
+        let timeoutId = null;
+        return (...args) => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => fn(...args), waitMs);
+        };
+    }
+
     // ---------------------------------------------------------------------
     // Ausrück-Interceptor: verzögert das tatsächliche Alarmieren
     //
-    // Leitstellenspiel kennt serverseitig keine Ausrückverzögerung - das
-    // Spiel löst die Alarmierung eines Fahrzeugs über einen AJAX-Link
-    // (Rails-UJS, `data-remote="true"`) auf `/vehicles/<id>/...` aus, z.B.
-    // beim Rückalarmieren `/vehicles/<id>/backalarm?return=mission`. Der
-    // Interceptor fängt den Klick auf einen solchen Alarmieren-Link ab,
-    // zeigt einen Countdown an und löst den echten Klick erst danach aus,
-    // damit Rails-UJS die Anfrage wie gewohnt verarbeitet.
+    // Leitstellenspiel kennt serverseitig keine Ausrückverzögerung. Der im
+    // Spiel sichtbare "Alarmieren"-Button (grüner Button je Einsatz in der
+    // Fahrzeug-Detailansicht) wird per Klick auf den exakten Button-Text
+    // erkannt - das ist zuverlässiger als ein geratener Link-/Href-Aufbau,
+    // da der Text im Spiel-UI stabil sichtbar ist. Die zugehörige
+    // Fahrzeug-ID wird zuerst aus der Tabellenzeile des Buttons abgeleitet
+    // (falls dort ein Link auf /vehicles/<id> existiert) und andernfalls
+    // aus dem aktuell erkannten Fahrzeug der Einzelansicht übernommen.
     //
-    // Hinweis: Ohne Zugriff auf einen eingeloggten Testaccount konnte der
-    // exakte href-Aufbau des "Alarmieren"-Links nicht live verifiziert
-    // werden. Greift die Erkennung nicht, passiert nichts Schädliches -
-    // das Fahrzeug rückt einfach ohne Verzögerung aus wie bisher. Über
-    // `window.__lssAvzDebug = true` in der Konsole lässt sich mitloggen,
-    // welche Links erkannt/ignoriert werden, um den Selektor bei Bedarf
-    // anzupassen.
+    // `window.__lssAvzDebug = true` in der Konsole loggt mit, welche
+    // Klicks erkannt/ignoriert werden.
     // ---------------------------------------------------------------------
-    const pendingLinks = new WeakSet();
-    const bypassLinks = new WeakSet();
-
-    function extractVehicleId(href) {
-        const match = href.match(/\/vehicles\/(\d+)/);
-        return match ? match[1] : null;
-    }
-
-    function isDispatchLink(link) {
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        const href = link.getAttribute('href') || '';
-        if (!/\/vehicles\/\d+/.test(href)) return false;
-        if (/backalarm|zurueck|recall/i.test(href)) return false; // Rückalarmierung ausschließen
-        return /alarm/i.test(href);
-    }
+    const ALARM_BUTTON_TEXT = /^alarmieren!?$/i;
+    const pendingButtons = new WeakSet();
+    const bypassButtons = new WeakSet();
 
     function debugLog(...args) {
         if (window.__lssAvzDebug) console.log(`[${SCRIPT_NAME}]`, ...args);
     }
 
-    function showCountdownBadge(link, seconds, onCancel) {
+    function isAlarmButton(el) {
+        if (!el || !(el instanceof HTMLElement)) return false;
+        if (!['A', 'BUTTON', 'INPUT'].includes(el.tagName)) return false;
+        const text = (el.tagName === 'INPUT' ? el.value : el.textContent).trim();
+        return ALARM_BUTTON_TEXT.test(text);
+    }
+
+    function resolveVehicleIdForButton(button) {
+        const row = button.closest('tr, li, .row, [data-vehicle-id]');
+        if (row) {
+            if (row.dataset && row.dataset.vehicleId) return row.dataset.vehicleId;
+            const link = row.querySelector('a[href*="/vehicles/"]');
+            if (link) {
+                const match = (link.getAttribute('href') || '').match(/\/vehicles\/(\d+)/);
+                if (match) return match[1];
+            }
+        }
+        return currentVehicleIdGuess;
+    }
+
+    function showCountdownBadge(button, seconds, onCancel) {
         const badge = document.createElement('span');
         badge.className = 'avz-countdown-badge';
         let remaining = seconds;
@@ -334,7 +424,7 @@
         cancelBtn.textContent = 'Abbrechen';
         badge.appendChild(cancelBtn);
 
-        link.insertAdjacentElement('afterend', badge);
+        button.insertAdjacentElement('afterend', badge);
 
         const interval = setInterval(() => {
             remaining -= 1;
@@ -358,22 +448,22 @@
     }
 
     document.addEventListener('click', (event) => {
-        const link = event.target.closest('a');
-        if (!link) return;
+        const button = event.target.closest('a, button, input[type="submit"], input[type="button"]');
+        if (!button) return;
 
-        if (bypassLinks.has(link)) {
-            bypassLinks.delete(link);
-            debugLog('Verzögerter Klick wird durchgelassen:', link.href);
+        if (bypassButtons.has(button)) {
+            bypassButtons.delete(button);
+            debugLog('Verzögerter Klick wird durchgelassen:', button);
             return; // Diesen Klick unverändert durchlassen (echte Alarmierung)
         }
 
-        if (!isDispatchLink(link)) {
-            debugLog('Kein Alarmieren-Link, ignoriert:', link.getAttribute('href'));
+        if (!isAlarmButton(button)) return;
+
+        const vehicleId = resolveVehicleIdForButton(button);
+        if (!vehicleId) {
+            debugLog('Alarmieren-Button erkannt, aber keine Fahrzeug-ID ableitbar:', button);
             return;
         }
-
-        const vehicleId = extractVehicleId(link.getAttribute('href') || '');
-        if (!vehicleId) return;
 
         const delay = getDelaySeconds(vehicleId);
         if (delay <= 0) {
@@ -381,8 +471,7 @@
             return;
         }
 
-        if (pendingLinks.has(link)) {
-            // Bereits ein Countdown für diesen Link aktiv - weiteren Klick ignorieren
+        if (pendingButtons.has(button)) {
             event.preventDefault();
             event.stopImmediatePropagation();
             return;
@@ -390,21 +479,21 @@
 
         event.preventDefault();
         event.stopImmediatePropagation();
-        pendingLinks.add(link);
+        pendingButtons.add(button);
         debugLog(`Fahrzeug ${vehicleId}: Alarmierung wird um ${delay}s verzögert.`);
 
         const timeoutId = setTimeout(() => {
-            pendingLinks.delete(link);
-            bypassLinks.add(link);
-            link.click();
+            pendingButtons.delete(button);
+            bypassButtons.add(button);
+            button.click();
         }, delay * 1000);
 
-        showCountdownBadge(link, delay, () => {
+        showCountdownBadge(button, delay, () => {
             clearTimeout(timeoutId);
-            pendingLinks.delete(link);
+            pendingButtons.delete(button);
             debugLog(`Fahrzeug ${vehicleId}: Verzögerte Alarmierung abgebrochen.`);
         });
-    }, true); // Capture-Phase: läuft vor dem Rails-UJS-Handler des Spiels
+    }, true); // Capture-Phase: läuft vor dem Klick-Handler des Spiels
 
     // ---------------------------------------------------------------------
     // Styles
@@ -550,7 +639,14 @@
 
     migrateLegacyDelays();
     checkForUpdate();
-    loadFahrzeuge();
+
+    // Da Wachen/Fahrzeuge als AJAX-Overlay ohne URL-Wechsel angezeigt
+    // werden, gibt es kein "Seite geladen"-Ereignis dafür - stattdessen
+    // wird bei jeder DOM-Änderung (debounced) neu geprüft, ob gerade eine
+    // Wache oder ein Fahrzeug sichtbar ist.
+    const debouncedRefresh = debounce(refreshForCurrentView, 400);
+    new MutationObserver(debouncedRefresh).observe(document.body, { childList: true, subtree: true });
+    refreshForCurrentView();
 
     // Bestätigt, dass das Skript auf dieser Seite überhaupt injiziert und
     // ausgeführt wurde. Bleibt diese Meldung aus, greift das @match nicht
