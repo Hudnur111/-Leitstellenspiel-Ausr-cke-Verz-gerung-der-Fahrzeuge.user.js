@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      4.0.0
+// @version      4.1.0
 // @description  Zeigt Fahrzeuge der aktuellen Wache, ermöglicht die Konfiguration einer Ausrückverzögerung pro Fahrzeug und verzögert das tatsächliche Alarmieren im Spiel um die eingestellte Zeit.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/buildings/*
+// @match        https://leitstellenspiel.de/buildings/*
 // @match        https://www.leitstellenspiel.de/missions/*
+// @match        https://leitstellenspiel.de/missions/*
 // @icon         https://cdn-icons-png.flaticon.com/512/3135/3135715.png
 // @license      GPL-3.0-or-later
 // @grant        GM_addStyle
@@ -27,7 +29,7 @@
     // Skriptinformationen / Update-Check
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '4.0.0';
+    const CURRENT_VERSION = '4.1.0';
     const UPDATE_URL = 'https://github.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js/raw/main/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js';
     const VERSION_URL = 'https://raw.githubusercontent.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge/main/version.txt';
     const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // alle 6 Stunden, nicht bei jedem Seitenaufruf
@@ -71,6 +73,25 @@
     }
 
     // ---------------------------------------------------------------------
+    // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
+    // liefen bisher nur in die Browser-Konsole und blieben für die meisten
+    // Nutzer unsichtbar - dadurch wirkte das Skript, als würde es "nicht
+    // mit dem Spiel verbinden", obwohl der eigentliche Fehler erkennbar
+    // gewesen wäre. Ab sofort erscheint jede relevante Meldung auch direkt
+    // auf der Seite.
+    // ---------------------------------------------------------------------
+    function showToast(message, type = 'info', timeoutMs = 6000) {
+        const toast = document.createElement('div');
+        toast.className = `avz-toast avz-toast-${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        if (timeoutMs > 0) {
+            setTimeout(() => toast.remove(), timeoutMs);
+        }
+        return toast;
+    }
+
+    // ---------------------------------------------------------------------
     // Verzögerungs-Speicher (localStorage, da das Spiel selbst keine
     // Ausrückverzögerung kennt - diese wird ausschließlich clientseitig
     // durch dieses Skript simuliert)
@@ -111,32 +132,76 @@
     // ---------------------------------------------------------------------
     // Sidebar zur Konfiguration der Verzögerungen (nur auf /buildings/*)
     // ---------------------------------------------------------------------
+    const VEHICLE_ENDPOINTS = ['/api/vehicles', '/api/vehicles.json'];
+    const BUILDING_ID_FIELDS = ['building_id', 'caserne_id', 'station_id'];
+
+    async function fetchAlleFahrzeuge() {
+        let lastError = null;
+        for (const url of VEHICLE_ENDPOINTS) {
+            try {
+                const response = await fetch(url, {
+                    credentials: 'same-origin',
+                    headers: { Accept: 'application/json' }
+                });
+                if (!response.ok) {
+                    lastError = new Error(`${url} → HTTP ${response.status} ${response.statusText}`);
+                    continue;
+                }
+                const data = await response.json();
+                if (Array.isArray(data)) return data;
+                if (data && Array.isArray(data.result)) return data.result;
+                if (data && Array.isArray(data.vehicles)) return data.vehicles;
+                lastError = new Error(`${url} → unerwartetes Antwortformat: ${JSON.stringify(data).slice(0, 200)}`);
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        throw lastError || new Error('Kein Fahrzeug-Endpunkt konnte erreicht werden.');
+    }
+
+    function findBuildingIdField(fahrzeuge) {
+        return BUILDING_ID_FIELDS.find(field => fahrzeuge.some(fz => fz[field] !== undefined));
+    }
+
     async function loadFahrzeuge() {
         const match = window.location.pathname.match(/^\/buildings\/(\d+)/);
         if (!match) return;
         const wacheId = Number(match[1]);
 
         try {
-            const response = await fetch('/api/vehicles', { credentials: 'same-origin' });
-            if (!response.ok) throw new Error(`Fehler beim Abrufen der Fahrzeuge: ${response.status} ${response.statusText}`);
+            const alleFahrzeuge = await fetchAlleFahrzeuge();
+            debugLog(`${alleFahrzeuge.length} Fahrzeuge insgesamt von der API erhalten.`);
 
-            const alleFahrzeuge = await response.json();
-            if (!Array.isArray(alleFahrzeuge)) {
-                throw new Error('Unerwartetes Antwortformat der Fahrzeug-API.');
+            const buildingField = findBuildingIdField(alleFahrzeuge);
+            let fahrzeuge;
+            if (buildingField) {
+                fahrzeuge = alleFahrzeuge.filter(fz => Number(fz[buildingField]) === wacheId);
+            } else {
+                // Feldname unbekannt/abweichend: lieber alle Fahrzeuge zeigen
+                // als das Skript unsichtbar nichts tun zu lassen.
+                showToast(
+                    'Ausrückverzögerung: Wache konnte nicht anhand der Fahrzeugdaten gefiltert werden - zeige alle Fahrzeuge. Bitte melden!',
+                    'warning',
+                    10000
+                );
+                fahrzeuge = alleFahrzeuge;
             }
 
-            const fahrzeuge = alleFahrzeuge
-                .filter(fz => Number(fz.building_id) === wacheId)
-                .sort((a, b) => (a.caption || '').localeCompare(b.caption || ''));
+            fahrzeuge = fahrzeuge.slice().sort((a, b) => (a.caption || '').localeCompare(b.caption || ''));
 
             if (fahrzeuge.length === 0) {
-                console.info(`[${SCRIPT_NAME}] Keine Fahrzeuge für Wache ${wacheId} gefunden.`);
+                showToast(
+                    `Ausrückverzögerung: Keine Fahrzeuge für Wache ${wacheId} gefunden (von ${alleFahrzeuge.length} insgesamt).`,
+                    'warning',
+                    8000
+                );
                 return;
             }
 
             createSidebar(fahrzeuge);
         } catch (error) {
             console.error(`[${SCRIPT_NAME}] Fehler beim Laden der Fahrzeuge:`, error);
+            showToast(`Ausrückverzögerung: Fahrzeuge konnten nicht geladen werden (${error.message}).`, 'error', 12000);
         }
     }
 
@@ -459,9 +524,37 @@
         .avz-countdown-cancel:hover {
             background: #b02a37;
         }
+        .avz-toast {
+            position: fixed;
+            bottom: 70px;
+            right: 20px;
+            max-width: 320px;
+            z-index: 1001;
+            padding: 10px 14px;
+            border-radius: 5px;
+            font-size: 13px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+            color: #fff;
+        }
+        .avz-toast-info {
+            background-color: #007bff;
+        }
+        .avz-toast-warning {
+            background-color: #e0a800;
+            color: #212529;
+        }
+        .avz-toast-error {
+            background-color: #dc3545;
+        }
     `);
 
     migrateLegacyDelays();
     checkForUpdate();
     loadFahrzeuge();
+
+    // Bestätigt, dass das Skript auf dieser Seite überhaupt injiziert und
+    // ausgeführt wurde. Bleibt diese Meldung aus, greift das @match nicht
+    // (falsche Domain/Pfad) oder der UserScript-Manager blockiert das
+    // Skript - unabhängig von allen anderen Fehlern hier im Code.
+    showToast(`Ausrückverzögerung v${CURRENT_VERSION} geladen.`, 'info', 4000);
 })();
