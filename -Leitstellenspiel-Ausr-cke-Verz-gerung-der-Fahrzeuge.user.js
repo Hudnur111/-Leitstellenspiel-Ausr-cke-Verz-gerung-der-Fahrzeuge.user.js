@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      6.0.0
+// @version      6.1.0
 // @description  Zeigt alle Fahrzeuge der aktuellen Wache in einer Sidebar und ermöglicht das komfortable Bearbeiten der nativen "Ausrücke-Verzögerung" für alle Fahrzeuge an einer Stelle.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/*
@@ -33,7 +33,7 @@
     // zudem auf eine nicht existierende version.txt und lief nie).
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '6.0.0';
+    const CURRENT_VERSION = '6.1.0';
 
     // ---------------------------------------------------------------------
     // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
@@ -411,15 +411,17 @@
     // ---------------------------------------------------------------------
     // Styles
     // ---------------------------------------------------------------------
-    // Farben/Look an die dunkle Leitstellenspiel-Oberfläche angelehnt
-    // (dunkle Panels, helle Schrift, blaue Akzentfarbe für Buttons).
+    // Farben an die tatsächliche Leitstellenspiel-Oberfläche angelehnt:
+    // neutrales dunkles Grau statt Navy-Blau für Panels, und Grün (wie der
+    // "Alarmieren"-Button und aktive Kategorie-Buttons im Spiel) als
+    // Akzentfarbe statt Blau.
     GM_addStyle(`
         #avzToggleButton {
             position: fixed;
             bottom: 20px;
             right: 20px;
             z-index: 10000;
-            background-color: #3b82f6;
+            background-color: #3ba757;
             color: #fff;
             border: none;
             padding: 10px 20px;
@@ -430,7 +432,7 @@
             cursor: pointer;
         }
         #avzToggleButton:hover {
-            background-color: #2563eb;
+            background-color: #2f8a46;
         }
         #vehicleSidebar {
             position: fixed;
@@ -439,7 +441,7 @@
             width: 360px;
             max-height: 70vh;
             overflow-y: auto;
-            background-color: #1b1f27;
+            background-color: #2e2e2e;
             color: #e8e8e8;
             border: 1px solid rgba(255,255,255,0.12);
             border-radius: 8px;
@@ -477,18 +479,18 @@
             margin: 10px 0 14px;
         }
         .btn-primary {
-            background-color: #3b82f6;
-            border-color: #3b82f6;
+            background-color: #3ba757;
+            border-color: #3ba757;
             padding: 8px 16px;
             color: #fff;
             border-radius: 5px;
-            border: 1px solid #3b82f6;
+            border: 1px solid #3ba757;
             cursor: pointer;
             font-weight: bold;
         }
         .btn-primary:hover {
-            background-color: #2563eb;
-            border-color: #2563eb;
+            background-color: #2f8a46;
+            border-color: #2f8a46;
         }
         .avz-feedback {
             display: inline-block;
@@ -507,15 +509,15 @@
         .form-group input {
             width: 100%;
             padding: 8px;
-            background-color: #11141a;
+            background-color: #1e1e1e;
             color: #fff;
-            border: 1px solid #3a3f4b;
+            border: 1px solid #4a4a4a;
             border-radius: 5px;
             box-sizing: border-box;
         }
         .form-group input:focus {
             outline: none;
-            border-color: #3b82f6;
+            border-color: #3ba757;
         }
         .form-group input:disabled {
             opacity: 0.5;
@@ -533,11 +535,11 @@
             color: #fff;
         }
         .avz-toast-info {
-            background-color: #3b82f6;
+            background-color: #3ba757;
         }
         .avz-toast-warning {
             background-color: #e0a800;
-            color: #1b1f27;
+            color: #1e1e1e;
         }
         .avz-toast-error {
             background-color: #dc3545;
