@@ -1,4 +1,4 @@
-# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v5.1.0)
+# 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v6.0.0)
 
 **Autor:** Hudnur111 · IBoy · Coding Crew Tag 1  
 **Status:** In Entwicklung  
@@ -8,24 +8,20 @@
 
 ## 📌 Beschreibung
 
-Dieses **Benutzerskript** für das Spiel **Leitstellenspiel** bietet eine erweiterte Möglichkeit zur **individuellen Konfiguration von Ausrückverzögerungen** für Fahrzeuge **einer einzelnen Wache**.  
-Es ergänzt die Spieloberfläche um eine moderne, benutzerfreundliche **Sidebar**, mit der alle Verzögerungen übersichtlich und intuitiv angepasst werden können, und verzögert das tatsächliche Alarmieren im Spiel um die eingestellte Zeit.
+Dieses **Benutzerskript** für das Spiel **Leitstellenspiel** zeigt alle Fahrzeuge der aktuellen Wache in einer übersichtlichen Sidebar und macht die native **„Ausrücke-Verzögerung"** jedes Fahrzeugs (Zeit in Sekunden, bis es nach der Alarmierung die Wache verlässt) an einer zentralen Stelle bearbeitbar, statt jedes Fahrzeug einzeln über „Fahrzeug bearbeiten“ öffnen zu müssen.
 
 ---
 
 ## ✨ Hauptfunktionen
 
-- 🔧 **Individuelle Fahrzeugverzögerungen**  
-  Passen Sie die Ausrückverzögerungen **pro Fahrzeug** direkt über die Sidebar an – einfach, flexibel und in Echtzeit.
+- 🔧 **Alle Fahrzeuge einer Wache an einer Stelle**  
+  Sidebar zeigt jedes Fahrzeug der aktuell geöffneten Wache mit seiner echten, aktuellen Ausrücke-Verzögerung.
 
-- ⏱️ **Echte Verzögerung beim Alarmieren**  
-  Beim Klick auf „Alarmieren“ im Spiel erscheint ein Countdown; das Fahrzeug rückt erst danach tatsächlich aus. Der Countdown kann jederzeit abgebrochen werden.
+- 💾 **Schreibt direkt in die native Spiel-Einstellung**  
+  Beim Speichern wird die echte „Fahrzeug bearbeiten“-Seite im Hintergrund abgerufen und mit dem neuen Wert erneut abgeschickt – alle anderen Felder (Funkrufname, Personenanzahl, Arbeitszeiten, …) bleiben unverändert.
 
-- 🎨 **Professionelles Design**  
-  Die Sidebar ist modern gestaltet, bietet eine klare Struktur und eine Scrollfunktion für lange Fahrzeuglisten.
-
-- 💾 **Speicherfunktion**  
-  Verzögerungen können entweder über die **„Speichern“-Schaltfläche** oder durch **Drücken der Enter-Taste** gesichert werden.
+- 🎨 **Dunkles Design passend zur Spieloberfläche**  
+  Sidebar und Buttons sind an den dunklen Look von Leitstellenspiel angelehnt.
 
 - 🧭 **Benutzerfreundliche Steuerung**  
   Ein Button in der unteren rechten Ecke öffnet oder schließt die Sidebar.
@@ -54,35 +50,21 @@ Es wird empfohlen, regelmäßig nach Updates zu schauen, um von den neuesten Ver
 
 ## ℹ️ Sonstige Informationen
 
-### 🧪 Aktueller Entwicklungsstand (v5.1.0)
+### 🧪 Aktueller Entwicklungsstand (v6.0.0)
 
-**Automatische Updates (v5.1.0):** Das Skript enthält jetzt `@updateURL`/`@downloadURL` im Header. Tampermonkey prüft damit selbstständig (Standardeinstellung: periodisch im Hintergrund), ob sich `@version` in der `main`-Branch-Datei erhöht hat, und installiert neue Versionen automatisch. Voraussetzungen dafür:
+**Wichtigste Erkenntnis:** Leitstellenspiel hat die Ausrücke-Verzögerung **bereits eingebaut** – als Feld auf der nativen „Fahrzeug bearbeiten“-Seite (`/vehicles/<id>/edit`). Die Versionen bis v5.x haben das nicht genutzt, sondern versucht, das Alarmieren selbst über einen abgefangenen Klick zu verzögern (clientseitiger Nachbau) bzw. den Wert nur lokal in `localStorage` zu speichern – beides ohne echten Effekt im Spiel.
 
-1. Änderungen müssen in den `main`-Branch des Repos gemergt sein (nicht nur in einen Feature-Branch) – nur davon liest Tampermonkey.
-2. In Tampermonkey unter *Einstellungen → Update* muss die automatische Update-Prüfung aktiviert sein (Standard: an).
-3. Nach dem Einspielen dieser Version einmalig das Skript neu installieren bzw. in Tampermonkey unter *Dashboard → Skript → Updates prüfen* einmal manuell aktualisieren, damit die neuen `@updateURL`-Angaben übernommen werden. Ab dann läuft es automatisch.
+Seit v6.0.0 schreibt das Skript stattdessen direkt in das native Feld:
 
-Der bisherige eigene Update-Check per `GM_xmlhttpRequest` wurde entfernt – er zeigte auf eine nicht existierende `version.txt` und hat nie funktioniert. `@updateURL`/`@downloadURL` sind der Standard-Mechanismus von Tampermonkey/Greasemonkey und robuster.
+1. Für jedes Fahrzeug der Wache wird die echte Bearbeiten-Seite im Hintergrund per `fetch` geladen und der aktuelle Wert aus dem Feld mit dem Label „Ausrücke-Verzögerung“ ausgelesen (nicht anhand eines geratenen Feldnamens, sondern über den sichtbaren Text).
+2. Beim Speichern wird nur für **geänderte** Fahrzeuge das komplette native Formular (inkl. CSRF-Token und allen anderen Feldern unverändert) mit dem neuen Wert erneut abgeschickt.
+3. Automatisiert gegen eine nachgebaute Kopie der echten Bearbeiten-Seite getestet: Lesen funktioniert, nur geänderte Fahrzeuge werden gespeichert, alle anderen Formularfelder bleiben nachweislich unangetastet.
 
-Leitstellenspiel kennt **serverseitig keine Ausrückverzögerung** – diese Funktion existiert im Spiel selbst nicht. Bis Version 3.1 hat das Skript die eingestellte Verzögerung nur in `localStorage` gespeichert, ohne dass sie irgendeinen Effekt im Spiel hatte.
+Damit entfällt der gesamte bisherige Klick-Interception-Mechanismus samt Countdown-Anzeige – nicht mehr nötig, da das Spiel die Verzögerung selbst korrekt umsetzt, sobald das native Feld gesetzt ist.
 
-**Wichtige Erkenntnis in v5.0.0:** Leitstellenspiel öffnet Wachen und Fahrzeuge als AJAX-Overlay, **ohne die Browser-URL zu wechseln**. Das Skript hat sich bis v4.1.0 auf `window.location.pathname` (`/buildings/123`) verlassen, das in der echten Spieloberfläche nie zutrifft – deshalb hat das Skript nie reagiert.
+**Frühere Erkenntnis (weiterhin relevant für die Wachen-Erkennung):** Leitstellenspiel öffnet Wachen als AJAX-Overlay, **ohne die Browser-URL zu wechseln**. Die aktuell angezeigte Wache wird daher über ihren sichtbaren Namen (Überschrift im Overlay) erkannt und mit `/api/buildings` bzw. `/api/vehicles` abgeglichen; ein `MutationObserver` beobachtet das Overlay laufend, da es ohne klassischen Seitenwechsel per AJAX nachlädt.
 
-Seit v5.0.0:
-
-- Die aktuell angezeigte Wache/das Fahrzeug wird über den **sichtbaren Namen** (Überschrift im Overlay) erkannt und mit `/api/buildings` bzw. `/api/vehicles` abgeglichen – unabhängig von der URL
-- Ein `MutationObserver` beobachtet das Overlay laufend, da es ohne klassischen Seitenwechsel per AJAX nachlädt
-- Der „Alarmieren“-Button wird über seinen sichtbaren Text erkannt (nicht mehr über einen geratenen Link-Aufbau)
-- `@match` gilt jetzt für die komplette Domain (`leitstellenspiel.de/*`), damit das Skript unabhängig vom Overlay-Zustand aktiv ist
-
-Außerdem wurde behoben:
-
-- Falscher API-Endpunkt (`/api/buildings/{id}/vehicles` existiert nicht) → jetzt `/api/vehicles` und `/api/buildings`
-- Versionsprüfung lief bei **jedem** Seitenaufruf gegen GitHub → jetzt auf alle 6 Stunden gedrosselt
-- Fehlende Fehlerrückmeldung im UI bei fehlgeschlagenem Laden der Fahrzeuge → sichtbare Toast-Meldungen
-- Bestehende Verzögerungen aus v3.1 werden beim ersten Start automatisch migriert
-
-⚠️ **Bekannte Einschränkung:** Die Erkennung basiert auf sichtbarem Text (Wachen-/Fahrzeugname, Button-Beschriftung „Alarmieren"). Weicht das Overlay strukturell stark ab, kann die Zuordnung fehlschlagen – dann greift keine Verzögerung, aber das Fahrzeug rückt wie gewohnt aus (kein Absturz). Zum Debuggen `window.__lssAvzDebug = true` in der Browser-Konsole setzen.
+⚠️ **Bekannte Einschränkung:** Die Erkennung des Verzögerungs-Feldes basiert auf dem sichtbaren Label-Text „Ausrücke-Verzögerung“. Ändert sich dieser Text im Spiel grundlegend, kann das Feld nicht gefunden werden – dann erscheint eine Fehlermeldung im Panel statt eines falschen Speicherversuchs. Zum Debuggen `window.__lssAvzDebug = true` in der Browser-Konsole setzen.
 
 🛠️ Rückmeldungen zum Live-Verhalten sind willkommen.
 

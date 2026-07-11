@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      5.1.0
-// @description  Zeigt Fahrzeuge der aktuellen Wache, ermöglicht die Konfiguration einer Ausrückverzögerung pro Fahrzeug und verzögert das tatsächliche Alarmieren im Spiel um die eingestellte Zeit.
+// @version      6.0.0
+// @description  Zeigt alle Fahrzeuge der aktuellen Wache in einer Sidebar und ermöglicht das komfortable Bearbeiten der nativen "Ausrücke-Verzögerung" für alle Fahrzeuge an einer Stelle.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/*
 // @match        https://leitstellenspiel.de/*
@@ -33,7 +33,7 @@
     // zudem auf eine nicht existierende version.txt und lief nie).
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '5.1.0';
+    const CURRENT_VERSION = '6.0.0';
 
     // ---------------------------------------------------------------------
     // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
@@ -54,42 +54,87 @@
         return toast;
     }
 
+    function debugLog(...args) {
+        if (window.__lssAvzDebug) console.log(`[${SCRIPT_NAME}]`, ...args);
+    }
+
     // ---------------------------------------------------------------------
-    // Verzögerungs-Speicher (localStorage, da das Spiel selbst keine
-    // Ausrückverzögerung kennt - diese wird ausschließlich clientseitig
-    // durch dieses Skript simuliert)
+    // Native Ausrücke-Verzögerung
+    //
+    // Wichtige Korrektur gegenüber v5.x: Leitstellenspiel hat dieses
+    // Feature bereits eingebaut ("Ausrücke-Verzögerung" auf der
+    // Fahrzeug-Bearbeiten-Seite, /vehicles/<id>/edit) - das Skript muss
+    // also nicht selbst irgendetwas verzögern, sondern nur bequem dieses
+    // native Feld für alle Fahrzeuge einer Wache an einer Stelle
+    // konfigurierbar machen. Dazu wird die echte Bearbeiten-Seite im
+    // Hintergrund abgerufen, das Feld anhand seines sichtbaren Labels
+    // gefunden (nicht anhand eines geratenen Feldnamens) und das
+    // Formular mit geändertem Wert erneut abgeschickt - alle anderen
+    // Felder (Personenanzahl, Arbeitszeiten, ...) bleiben dabei unangetastet,
+    // da sie unverändert aus dem echten Formular übernommen werden.
     // ---------------------------------------------------------------------
-    const DELAY_KEY_PREFIX = 'lss_avz_delay_v1_';
-    const LEGACY_KEY_PREFIX = 'verzögerung-';
     const MAX_DELAY_SECONDS = 900; // Sicherheitsobergrenze: 15 Minuten
+    const DELAY_LABEL_TEXT = /ausrücke-?verzögerung/i;
 
-    // Alte, unpräfixte Keys (Version <= 3.1) einmalig übernehmen, damit
-    // bestehende Einstellungen der Nutzer nicht verloren gehen.
-    function migrateLegacyDelays() {
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i);
-            if (!key || !key.startsWith(LEGACY_KEY_PREFIX)) continue;
-            const vehicleId = key.slice(LEGACY_KEY_PREFIX.length);
-            const newKey = DELAY_KEY_PREFIX + vehicleId;
-            if (localStorage.getItem(newKey) === null) {
-                localStorage.setItem(newKey, localStorage.getItem(key));
+    function vehicleEditUrl(vehicleId) {
+        return `/vehicles/${vehicleId}/edit`;
+    }
+
+    function findDelayInput(doc) {
+        const labels = doc.querySelectorAll('label');
+        for (const label of labels) {
+            if (!DELAY_LABEL_TEXT.test(label.textContent || '')) continue;
+            const forId = label.getAttribute('for');
+            if (forId) {
+                const input = doc.getElementById(forId);
+                if (input) return input;
             }
-            localStorage.removeItem(key);
+            const container = label.closest('div') || label.parentElement;
+            const input = container && container.querySelector('input[type="number"], input[type="text"]');
+            if (input) return input;
         }
+        return null;
     }
 
-    function getDelaySeconds(vehicleId) {
-        const raw = localStorage.getItem(DELAY_KEY_PREFIX + vehicleId);
-        const value = Number.parseInt(raw, 10);
-        if (!Number.isFinite(value) || value < 0) return 0;
-        return Math.min(value, MAX_DELAY_SECONDS);
+    async function fetchVehicleEditDoc(vehicleId) {
+        const response = await fetch(vehicleEditUrl(vehicleId), {
+            credentials: 'same-origin',
+            headers: { Accept: 'text/html' }
+        });
+        if (!response.ok) {
+            throw new Error(`Bearbeiten-Seite für Fahrzeug ${vehicleId}: HTTP ${response.status}`);
+        }
+        const html = await response.text();
+        return new DOMParser().parseFromString(html, 'text/html');
     }
 
-    function setDelaySeconds(vehicleId, delay) {
-        const value = Number.parseInt(delay, 10);
-        const clamped = Number.isFinite(value) && value > 0 ? Math.min(value, MAX_DELAY_SECONDS) : 0;
-        localStorage.setItem(DELAY_KEY_PREFIX + vehicleId, String(clamped));
-        return clamped;
+    async function readNativeDelay(vehicleId) {
+        const doc = await fetchVehicleEditDoc(vehicleId);
+        const input = findDelayInput(doc);
+        if (!input) throw new Error('"Ausrücke-Verzögerung"-Feld nicht gefunden');
+        const value = Number.parseInt(input.value, 10);
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    async function writeNativeDelay(vehicleId, seconds) {
+        const doc = await fetchVehicleEditDoc(vehicleId);
+        const input = findDelayInput(doc);
+        if (!input || !input.name) throw new Error('"Ausrücke-Verzögerung"-Feld nicht gefunden');
+        const form = input.closest('form');
+        if (!form) throw new Error('Formular für die Fahrzeug-Bearbeitung nicht gefunden');
+
+        const formData = new FormData(form);
+        formData.set(input.name, String(seconds));
+
+        const action = form.getAttribute('action') || `/vehicles/${vehicleId}`;
+        const response = await fetch(action, {
+            method: 'POST', // Rails-Formulare senden PATCH/PUT per _method-Feld immer als POST
+            credentials: 'same-origin',
+            body: formData
+        });
+        if (!response.ok) {
+            throw new Error(`Speichern fehlgeschlagen: HTTP ${response.status}`);
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -202,7 +247,7 @@
                 <h4 id="avzSidebarTitle">Fahrzeug-Ausrück-Verzögerung</h4>
                 <button type="button" id="avzCloseButton" aria-label="Schließen">&times;</button>
             </div>
-            <p class="avz-hint">Verzögerung in Sekunden je Fahrzeug. Bei 0 wird sofort alarmiert.</p>
+            <p class="avz-hint">Ausrücke-Verzögerung in Sekunden je Fahrzeug (native Spiel-Einstellung). Bei 0 rückt das Fahrzeug sofort aus.</p>
             <div id="fahrzeugVerzoegerungList"></div>
             <button class="btn btn-primary" id="saveDelays">Speichern</button>
             <span id="saveFeedback" class="avz-feedback" style="display:none;">Verzögerungen erfolgreich gespeichert!</span>
@@ -222,7 +267,7 @@
         return sidebarState;
     }
 
-    function populateSidebar(building, fahrzeuge) {
+    async function populateSidebar(building, fahrzeuge) {
         const { sidebar, fahrzeugList } = ensureSidebarShell();
         sidebar.querySelector('#avzSidebarTitle').textContent = `Ausrück-Verzögerung: ${building.caption}`;
         fahrzeugList.innerHTML = '';
@@ -244,8 +289,8 @@
             input.id = `avz-fz-${fz.id}`;
             input.min = '0';
             input.max = String(MAX_DELAY_SECONDS);
-            input.placeholder = 'Verzögerung in Sekunden';
-            input.value = String(getDelaySeconds(fz.id));
+            input.placeholder = 'Lädt...';
+            input.disabled = true;
             input.dataset.vehicleId = String(fz.id);
 
             fzItem.appendChild(labelEl);
@@ -261,37 +306,66 @@
                 saveDelays(sorted);
             }
         };
-    }
 
-    function saveDelays(fahrzeuge) {
-        fahrzeuge.forEach(fz => {
+        // Aktuelle Werte kommen von der echten Fahrzeug-Bearbeiten-Seite -
+        // parallel pro Fahrzeug nachladen, damit das Panel nicht blockiert.
+        await Promise.all(sorted.map(async fz => {
             const input = document.getElementById(`avz-fz-${fz.id}`);
             if (!input) return;
-            const clamped = setDelaySeconds(fz.id, input.value);
-            input.value = String(clamped);
-        });
-
-        const feedback = document.getElementById('saveFeedback');
-        feedback.style.display = 'inline';
-        setTimeout(() => { feedback.style.display = 'none'; }, 2000);
+            try {
+                const value = await readNativeDelay(fz.id);
+                input.value = String(value);
+                input.dataset.loadedValue = String(value);
+            } catch (error) {
+                input.placeholder = 'Fehler';
+                debugLog(`Ausrücke-Verzögerung für Fahrzeug ${fz.id} konnte nicht gelesen werden:`, error);
+            } finally {
+                input.disabled = false;
+            }
+        }));
     }
 
-    // Wird von der Alarmieren-Erkennung (weiter unten) genutzt, falls sich
-    // die Fahrzeug-ID nicht direkt aus der Tabellenzeile des geklickten
-    // Buttons ableiten lässt (z.B. auf der Einzelfahrzeug-Ansicht, auf der
-    // alle "Alarmieren"-Buttons zum selben, aktuell angezeigten Fahrzeug
-    // gehören).
-    let currentVehicleIdGuess = null;
+    async function saveDelays(fahrzeuge) {
+        const changed = fahrzeuge
+            .map(fz => ({ fz, input: document.getElementById(`avz-fz-${fz.id}`) }))
+            .filter(({ input }) => input && !input.disabled && input.value !== input.dataset.loadedValue);
+
+        if (changed.length === 0) {
+            showToast('Ausrückverzögerung: Keine Änderungen zum Speichern.', 'info', 3000);
+            return;
+        }
+
+        const results = await Promise.allSettled(changed.map(async ({ fz, input }) => {
+            const clamped = Math.min(Math.max(Number.parseInt(input.value, 10) || 0, 0), MAX_DELAY_SECONDS);
+            await writeNativeDelay(fz.id, clamped);
+            input.value = String(clamped);
+            input.dataset.loadedValue = String(clamped);
+        }));
+
+        const failed = results.filter(r => r.status === 'rejected');
+        if (failed.length > 0) {
+            failed.forEach(r => debugLog('Speichern fehlgeschlagen:', r.reason));
+            showToast(
+                `Ausrückverzögerung: ${failed.length} von ${changed.length} Fahrzeugen konnten nicht gespeichert werden.`,
+                'error',
+                8000
+            );
+        }
+        const succeeded = changed.length - failed.length;
+        if (succeeded > 0) {
+            const feedback = document.getElementById('saveFeedback');
+            feedback.textContent = `${succeeded} Fahrzeug(e) gespeichert!`;
+            feedback.style.display = 'inline';
+            setTimeout(() => { feedback.style.display = 'none'; }, 2500);
+        }
+    }
 
     // Wird bei jeder relevanten DOM-Änderung erneut ausgeführt, um zu
-    // erkennen, ob gerade eine Wache oder ein Fahrzeug angezeigt wird -
-    // da sich weder URL noch ein "Seitenwechsel"-Event dafür eignen.
+    // erkennen, ob gerade eine Wache angezeigt wird - da sich weder URL
+    // noch ein "Seitenwechsel"-Event dafür eignen.
     async function refreshForCurrentView() {
         try {
             const vehicles = await getVehiclesIndex();
-            const currentVehicle = findEntityByVisibleCaption(vehicles);
-            currentVehicleIdGuess = currentVehicle ? currentVehicle.id : null;
-
             const buildings = await getBuildingsIndex();
             const building = findEntityByVisibleCaption(buildings);
             if (!building || building.id === sidebarState.currentBuildingId) return;
@@ -333,132 +407,6 @@
             timeoutId = setTimeout(() => fn(...args), waitMs);
         };
     }
-
-    // ---------------------------------------------------------------------
-    // Ausrück-Interceptor: verzögert das tatsächliche Alarmieren
-    //
-    // Leitstellenspiel kennt serverseitig keine Ausrückverzögerung. Der im
-    // Spiel sichtbare "Alarmieren"-Button (grüner Button je Einsatz in der
-    // Fahrzeug-Detailansicht) wird per Klick auf den exakten Button-Text
-    // erkannt - das ist zuverlässiger als ein geratener Link-/Href-Aufbau,
-    // da der Text im Spiel-UI stabil sichtbar ist. Die zugehörige
-    // Fahrzeug-ID wird zuerst aus der Tabellenzeile des Buttons abgeleitet
-    // (falls dort ein Link auf /vehicles/<id> existiert) und andernfalls
-    // aus dem aktuell erkannten Fahrzeug der Einzelansicht übernommen.
-    //
-    // `window.__lssAvzDebug = true` in der Konsole loggt mit, welche
-    // Klicks erkannt/ignoriert werden.
-    // ---------------------------------------------------------------------
-    const ALARM_BUTTON_TEXT = /^alarmieren!?$/i;
-    const pendingButtons = new WeakSet();
-    const bypassButtons = new WeakSet();
-
-    function debugLog(...args) {
-        if (window.__lssAvzDebug) console.log(`[${SCRIPT_NAME}]`, ...args);
-    }
-
-    function isAlarmButton(el) {
-        if (!el || !(el instanceof HTMLElement)) return false;
-        if (!['A', 'BUTTON', 'INPUT'].includes(el.tagName)) return false;
-        const text = (el.tagName === 'INPUT' ? el.value : el.textContent).trim();
-        return ALARM_BUTTON_TEXT.test(text);
-    }
-
-    function resolveVehicleIdForButton(button) {
-        const row = button.closest('tr, li, .row, [data-vehicle-id]');
-        if (row) {
-            if (row.dataset && row.dataset.vehicleId) return row.dataset.vehicleId;
-            const link = row.querySelector('a[href*="/vehicles/"]');
-            if (link) {
-                const match = (link.getAttribute('href') || '').match(/\/vehicles\/(\d+)/);
-                if (match) return match[1];
-            }
-        }
-        return currentVehicleIdGuess;
-    }
-
-    function showCountdownBadge(button, seconds, onCancel) {
-        const badge = document.createElement('span');
-        badge.className = 'avz-countdown-badge';
-        let remaining = seconds;
-        badge.textContent = ` (Ausrücken in ${remaining}s) `;
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.type = 'button';
-        cancelBtn.className = 'avz-countdown-cancel';
-        cancelBtn.textContent = 'Abbrechen';
-        badge.appendChild(cancelBtn);
-
-        button.insertAdjacentElement('afterend', badge);
-
-        const interval = setInterval(() => {
-            remaining -= 1;
-            badge.firstChild.textContent = ` (Ausrücken in ${Math.max(remaining, 0)}s) `;
-        }, 1000);
-
-        cancelBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            clearInterval(interval);
-            badge.remove();
-            onCancel();
-        });
-
-        return {
-            remove() {
-                clearInterval(interval);
-                badge.remove();
-            }
-        };
-    }
-
-    document.addEventListener('click', (event) => {
-        const button = event.target.closest('a, button, input[type="submit"], input[type="button"]');
-        if (!button) return;
-
-        if (bypassButtons.has(button)) {
-            bypassButtons.delete(button);
-            debugLog('Verzögerter Klick wird durchgelassen:', button);
-            return; // Diesen Klick unverändert durchlassen (echte Alarmierung)
-        }
-
-        if (!isAlarmButton(button)) return;
-
-        const vehicleId = resolveVehicleIdForButton(button);
-        if (!vehicleId) {
-            debugLog('Alarmieren-Button erkannt, aber keine Fahrzeug-ID ableitbar:', button);
-            return;
-        }
-
-        const delay = getDelaySeconds(vehicleId);
-        if (delay <= 0) {
-            debugLog(`Fahrzeug ${vehicleId}: keine Verzögerung konfiguriert.`);
-            return;
-        }
-
-        if (pendingButtons.has(button)) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            return;
-        }
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        pendingButtons.add(button);
-        debugLog(`Fahrzeug ${vehicleId}: Alarmierung wird um ${delay}s verzögert.`);
-
-        const timeoutId = setTimeout(() => {
-            pendingButtons.delete(button);
-            bypassButtons.add(button);
-            button.click();
-        }, delay * 1000);
-
-        showCountdownBadge(button, delay, () => {
-            clearTimeout(timeoutId);
-            pendingButtons.delete(button);
-            debugLog(`Fahrzeug ${vehicleId}: Verzögerte Alarmierung abgebrochen.`);
-        });
-    }, true); // Capture-Phase: läuft vor dem Klick-Handler des Spiels
 
     // ---------------------------------------------------------------------
     // Styles
@@ -569,29 +517,8 @@
             outline: none;
             border-color: #3b82f6;
         }
-        .avz-countdown-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            color: #ffcf5c;
-            background-color: rgba(255, 193, 7, 0.12);
-            border: 1px solid rgba(255, 193, 7, 0.4);
-            border-radius: 4px;
-            padding: 2px 6px;
-            margin-left: 4px;
-        }
-        .avz-countdown-cancel {
-            border: none;
-            background: #dc3545;
-            color: #fff;
-            border-radius: 3px;
-            font-size: 11px;
-            padding: 1px 6px;
-            cursor: pointer;
-        }
-        .avz-countdown-cancel:hover {
-            background: #b02a37;
+        .form-group input:disabled {
+            opacity: 0.5;
         }
         .avz-toast {
             position: fixed;
@@ -617,12 +544,9 @@
         }
     `);
 
-    migrateLegacyDelays();
-
-    // Da Wachen/Fahrzeuge als AJAX-Overlay ohne URL-Wechsel angezeigt
-    // werden, gibt es kein "Seite geladen"-Ereignis dafür - stattdessen
-    // wird bei jeder DOM-Änderung (debounced) neu geprüft, ob gerade eine
-    // Wache oder ein Fahrzeug sichtbar ist.
+    // Da Wachen als AJAX-Overlay ohne URL-Wechsel angezeigt werden, gibt
+    // es kein "Seite geladen"-Ereignis dafür - stattdessen wird bei jeder
+    // DOM-Änderung (debounced) neu geprüft, ob gerade eine Wache sichtbar ist.
     const debouncedRefresh = debounce(refreshForCurrentView, 400);
     new MutationObserver(debouncedRefresh).observe(document.body, { childList: true, subtree: true });
     refreshForCurrentView();
