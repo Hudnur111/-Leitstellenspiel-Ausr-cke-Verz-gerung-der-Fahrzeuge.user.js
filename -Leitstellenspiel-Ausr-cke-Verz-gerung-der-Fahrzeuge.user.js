@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      6.2.0
+// @version      6.3.0
 // @description  Zeigt alle Fahrzeuge der aktuellen Wache in einer Sidebar und ermöglicht das komfortable Bearbeiten der nativen "Ausrücke-Verzögerung" für alle Fahrzeuge an einer Stelle.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/*
@@ -33,7 +33,7 @@
     // zudem auf eine nicht existierende version.txt und lief nie).
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '6.2.0';
+    const CURRENT_VERSION = '6.3.0';
 
     // ---------------------------------------------------------------------
     // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
@@ -76,6 +76,63 @@
     const MAX_DELAY_SECONDS = 900; // Sicherheitsobergrenze: 15 Minuten
     const DELAY_LABEL_TEXT = /ausrücke-?verzögerung/i;
 
+    // ---------------------------------------------------------------------
+    // Request-Drosselung (N+1-Problem, siehe GitHub-Issue #6): Jedes
+    // Fahrzeug einer Wache benötigt einen eigenen Request auf seine
+    // Bearbeiten-Seite. Ohne Begrenzung würde eine Wache mit vielen
+    // Fahrzeugen dutzende Requests gleichzeitig abfeuern - unnötige Last
+    // für den Spiel-Server und ein Risiko für Rate-Limits. Ein einfacher
+    // Scheduler begrenzt sowohl die parallele Anzahl als auch den
+    // Mindestabstand zwischen Requests. Zusätzlich wird jeder gelesene
+    // Wert kurzzeitig gecacht, damit ein erneutes Öffnen derselben Wache
+    // nicht sofort wieder alle Fahrzeuge neu abfragt.
+    // ---------------------------------------------------------------------
+    const MAX_CONCURRENT_VEHICLE_REQUESTS = 2;
+    const MIN_VEHICLE_REQUEST_INTERVAL_MS = 400; // max. ~2,5 Requests/Sekunde
+
+    function createRequestLimiter(maxConcurrent, minIntervalMs) {
+        let active = 0;
+        let lastStart = 0;
+        let timerScheduled = false;
+        const queue = [];
+
+        function pump() {
+            timerScheduled = false;
+            while (active < maxConcurrent && queue.length > 0) {
+                const wait = lastStart + minIntervalMs - Date.now();
+                if (wait > 0) {
+                    if (!timerScheduled) {
+                        timerScheduled = true;
+                        setTimeout(pump, wait);
+                    }
+                    return;
+                }
+                const task = queue.shift();
+                active++;
+                lastStart = Date.now();
+                task.fn().then(task.resolve, task.reject).finally(() => {
+                    active--;
+                    pump();
+                });
+            }
+        }
+
+        return function schedule(fn) {
+            return new Promise((resolve, reject) => {
+                queue.push({ fn, resolve, reject });
+                pump();
+            });
+        };
+    }
+
+    const scheduleVehicleRequest = createRequestLimiter(
+        MAX_CONCURRENT_VEHICLE_REQUESTS,
+        MIN_VEHICLE_REQUEST_INTERVAL_MS
+    );
+
+    const nativeDelayCache = new Map(); // vehicleId -> { value, at }
+    const NATIVE_DELAY_CACHE_TTL_MS = 45 * 1000;
+
     function vehicleEditUrl(vehicleId) {
         return `/vehicles/${vehicleId}/edit`;
     }
@@ -96,24 +153,34 @@
         return null;
     }
 
+    // Alle Requests auf Fahrzeug-Bearbeiten-Seiten laufen durch den
+    // Scheduler, damit gleichzeitig immer nur wenige unterwegs sind.
     async function fetchVehicleEditDoc(vehicleId) {
-        const response = await fetch(vehicleEditUrl(vehicleId), {
-            credentials: 'same-origin',
-            headers: { Accept: 'text/html' }
+        return scheduleVehicleRequest(async () => {
+            const response = await fetch(vehicleEditUrl(vehicleId), {
+                credentials: 'same-origin',
+                headers: { Accept: 'text/html' }
+            });
+            if (!response.ok) {
+                throw new Error(`Bearbeiten-Seite für Fahrzeug ${vehicleId}: HTTP ${response.status}`);
+            }
+            const html = await response.text();
+            return new DOMParser().parseFromString(html, 'text/html');
         });
-        if (!response.ok) {
-            throw new Error(`Bearbeiten-Seite für Fahrzeug ${vehicleId}: HTTP ${response.status}`);
-        }
-        const html = await response.text();
-        return new DOMParser().parseFromString(html, 'text/html');
     }
 
-    async function readNativeDelay(vehicleId) {
+    async function readNativeDelay(vehicleId, { useCache = true } = {}) {
+        const cached = nativeDelayCache.get(vehicleId);
+        if (useCache && cached && (Date.now() - cached.at) < NATIVE_DELAY_CACHE_TTL_MS) {
+            return cached.value;
+        }
         const doc = await fetchVehicleEditDoc(vehicleId);
         const input = findDelayInput(doc);
         if (!input) throw new Error('"Ausrücke-Verzögerung"-Feld nicht gefunden');
         const value = Number.parseInt(input.value, 10);
-        return Number.isFinite(value) ? value : 0;
+        const result = Number.isFinite(value) ? value : 0;
+        nativeDelayCache.set(vehicleId, { value: result, at: Date.now() });
+        return result;
     }
 
     async function writeNativeDelay(vehicleId, seconds) {
@@ -127,14 +194,15 @@
         formData.set(input.name, String(seconds));
 
         const action = form.getAttribute('action') || `/vehicles/${vehicleId}`;
-        const response = await fetch(action, {
+        const response = await scheduleVehicleRequest(() => fetch(action, {
             method: 'POST', // Rails-Formulare senden PATCH/PUT per _method-Feld immer als POST
             credentials: 'same-origin',
             body: formData
-        });
+        }));
         if (!response.ok) {
             throw new Error(`Speichern fehlgeschlagen: HTTP ${response.status}`);
         }
+        nativeDelayCache.set(vehicleId, { value: seconds, at: Date.now() });
     }
 
     // ---------------------------------------------------------------------
@@ -209,16 +277,33 @@
     // einem Text, der exakt dem "caption"-Feld eines Eintrags entspricht.
     // Robuster als das Raten von CSS-Klassen, da der Name im Spiel immer
     // sichtbar als Überschrift/Titel angezeigt wird.
+    //
+    // Namenskollisionen (siehe GitHub-Issue #5): Das Spiel erlaubt mehrere
+    // Wachen mit identischem Namen. Eine Datenbank-Eindeutigkeitsprüfung
+    // kann dieses Skript nicht erzwingen (das liegt am Spiel-Server, nicht
+    // am Client), aber es kann verhindern, bei einem Namens-Duplikat
+    // stillschweigend die falsche Wache zu treffen: Existieren mehrere
+    // Einträge mit demselben sichtbaren Namen, wird das als "ambiguous"
+    // markiert statt irgendeinen davon zu raten.
     function findEntityByVisibleCaption(entities) {
         if (!entities || entities.length === 0) return null;
-        const captionMap = new Map();
+        const captionGroups = new Map(); // getrimmter Name -> passende Einträge
         entities.forEach(entity => {
-            if (entity.caption) captionMap.set(entity.caption.trim(), entity);
+            if (!entity.caption) return;
+            const key = entity.caption.trim();
+            if (!captionGroups.has(key)) captionGroups.set(key, []);
+            captionGroups.get(key).push(entity);
         });
+
         const headingEls = document.querySelectorAll('h1, h2, h3, h4, .modal-title, .panel-title, .box-title, strong');
         for (const el of headingEls) {
             const text = el.textContent.trim();
-            if (text && captionMap.has(text)) return captionMap.get(text);
+            if (!text || !captionGroups.has(text)) continue;
+            const matches = captionGroups.get(text);
+            if (matches.length > 1) {
+                return { ambiguous: true, caption: text, candidates: matches };
+            }
+            return matches[0];
         }
         return null;
     }
@@ -398,7 +483,29 @@
             const vehicles = await getVehiclesIndex();
             const buildings = await getBuildingsIndex();
             const building = findEntityByVisibleCaption(buildings);
-            if (!building || building.id === sidebarState.currentBuildingId) return;
+            if (!building) return;
+
+            if (building.ambiguous) {
+                // Mehrere Wachen mit demselben Namen (siehe GitHub-Issue #5) -
+                // welche davon gemeint ist, lässt sich vom Client aus nicht
+                // sicher bestimmen. Lieber klar warnen als eventuell die
+                // falsche Wache anzuzeigen. Nur einmal pro Namens-Duplikat
+                // melden, nicht bei jeder DOM-Änderung erneut.
+                const marker = `ambiguous:${building.caption}`;
+                if (sidebarState.currentBuildingId !== marker) {
+                    sidebarState.currentBuildingId = marker;
+                    showToast(
+                        `Ausrückverzögerung: ${building.candidates.length} Wachen heißen "${building.caption}" - ` +
+                        'Zuordnung ist nicht eindeutig, Sidebar bleibt für diese Wache deaktiviert. ' +
+                        'Bitte einen der Wachennamen im Spiel eindeutig machen.',
+                        'error',
+                        12000
+                    );
+                }
+                return;
+            }
+
+            if (building.id === sidebarState.currentBuildingId) return;
 
             const buildingField = findBuildingIdField(vehicles);
             let fahrzeuge;
