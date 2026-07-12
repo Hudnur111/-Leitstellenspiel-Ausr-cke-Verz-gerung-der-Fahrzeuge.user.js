@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      6.3.0
+// @version      6.4.0
 // @description  Zeigt alle Fahrzeuge der aktuellen Wache in einer Sidebar und ermöglicht das komfortable Bearbeiten der nativen "Ausrücke-Verzögerung" für alle Fahrzeuge an einer Stelle.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/*
@@ -33,7 +33,7 @@
     // zudem auf eine nicht existierende version.txt und lief nie).
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '6.3.0';
+    const CURRENT_VERSION = '6.4.0';
 
     // ---------------------------------------------------------------------
     // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
@@ -43,11 +43,25 @@
     // gewesen wäre. Ab sofort erscheint jede relevante Meldung auch direkt
     // auf der Seite.
     // ---------------------------------------------------------------------
+    // Alle Toasts teilen sich einen Container mit Flex-Layout, damit
+    // mehrere gleichzeitige Meldungen (z.B. Ladebestätigung + eine
+    // Warnung kurz danach) gestapelt statt exakt übereinander gerendert
+    // werden.
+    let toastContainer = null;
+    function getToastContainer() {
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'avzToastContainer';
+            document.body.appendChild(toastContainer);
+        }
+        return toastContainer;
+    }
+
     function showToast(message, type = 'info', timeoutMs = 6000) {
         const toast = document.createElement('div');
         toast.className = `avz-toast avz-toast-${type}`;
         toast.textContent = message;
-        document.body.appendChild(toast);
+        getToastContainer().appendChild(toast);
         if (timeoutMs > 0) {
             setTimeout(() => toast.remove(), timeoutMs);
         }
@@ -677,12 +691,18 @@
         .form-group input:disabled {
             opacity: 0.5;
         }
-        .avz-toast {
+        #avzToastContainer {
             position: fixed;
             bottom: 70px;
             right: 20px;
-            max-width: 320px;
             z-index: 10001;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        .avz-toast {
+            max-width: 320px;
             padding: 10px 14px;
             border-radius: 6px;
             font-size: 13px;
@@ -704,8 +724,29 @@
     // Da Wachen als AJAX-Overlay ohne URL-Wechsel angezeigt werden, gibt
     // es kein "Seite geladen"-Ereignis dafür - stattdessen wird bei jeder
     // DOM-Änderung (debounced) neu geprüft, ob gerade eine Wache sichtbar ist.
+    //
+    // Die eigenen UI-Elemente (Sidebar, Toggle-Button, Toasts) lösen dabei
+    // selbst laufend Mutationen aus (Toast erscheint/verschwindet,
+    // Fahrzeugliste wird neu befüllt). Ohne Filter würde jede eigene
+    // Änderung einen weiteren (unnötigen) Erkennungslauf anstoßen - das
+    // ist zwar durch die Caches billig, aber vermeidbarer Ballast.
+    const OWN_ELEMENT_IDS = ['avzToggleButton', 'vehicleSidebar', 'avzToastContainer'];
+
+    function isOwnMutation(records) {
+        return records.every(record => {
+            const nodes = [...record.addedNodes, ...record.removedNodes];
+            return nodes.every(node => (
+                node.nodeType === Node.ELEMENT_NODE &&
+                (OWN_ELEMENT_IDS.includes(node.id) || OWN_ELEMENT_IDS.some(id => node.closest && node.closest(`#${id}`)))
+            ));
+        });
+    }
+
     const debouncedRefresh = debounce(refreshForCurrentView, 400);
-    new MutationObserver(debouncedRefresh).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver((records) => {
+        if (isOwnMutation(records)) return;
+        debouncedRefresh();
+    }).observe(document.body, { childList: true, subtree: true });
     refreshForCurrentView();
 
     // Bestätigt, dass das Skript auf dieser Seite überhaupt injiziert und
