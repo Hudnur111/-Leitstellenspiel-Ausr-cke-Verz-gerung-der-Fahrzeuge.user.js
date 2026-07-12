@@ -1,7 +1,7 @@
 # 🚒 Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache (v6.0.0)
 
-**Autor:** Hudnur111 · IBoy · Coding Crew Tag 1  
-**Status:** In Entwicklung  
+**Autor:** Hudnur111 
+**Status:** Publish v6
 **Website:** [Leitstellenspiel](https://www.leitstellenspiel.de)
 
 ---
