@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache
 // @namespace    https://www.leitstellenspiel.de/
-// @version      6.4.0
+// @version      6.4.1
 // @description  Zeigt alle Fahrzeuge der aktuellen Wache in einer Sidebar und ermöglicht das komfortable Bearbeiten der nativen "Ausrücke-Verzögerung" für alle Fahrzeuge an einer Stelle.
 // @author       Hudnur111 - IBoy - Coding Crew Tag 1
 // @match        https://www.leitstellenspiel.de/*
 // @match        https://leitstellenspiel.de/*
 // @icon         https://cdn-icons-png.flaticon.com/512/3135/3135715.png
-// @license      GPL-3.0-or-later
+// @license      Custom (No-Derivatives) - see LICENSE.txt
 // @updateURL    https://raw.githubusercontent.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js/main/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js
 // @downloadURL  https://raw.githubusercontent.com/Hudnur111/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js/main/-Leitstellenspiel-Ausr-cke-Verz-gerung-der-Fahrzeuge.user.js
 // @grant        GM_addStyle
@@ -33,7 +33,7 @@
     // zudem auf eine nicht existierende version.txt und lief nie).
     // ---------------------------------------------------------------------
     const SCRIPT_NAME = 'Leitstellenspiel Ausrücke-Verzögerung für einzelne Wache';
-    const CURRENT_VERSION = '6.4.0';
+    const CURRENT_VERSION = '6.4.1';
 
     // ---------------------------------------------------------------------
     // Sichtbare Status-/Fehlermeldungen. Fehler beim Laden der Fahrzeuge
